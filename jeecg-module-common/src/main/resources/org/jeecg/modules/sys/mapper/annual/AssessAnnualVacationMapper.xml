@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualVacationMapper">
+
+    <select id="getAssessVacation" resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualVacation">
+        select *
+        from assess_annual_vacation
+        where name in
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+        and
+        current_year = #{year}
+    </select>
+
+    <select id="getAssessAnnualVacation" resultType="org.jeecg.modules.sys.dto.AssessAnnualVacationDTO" >
+        select current_year,
+               name,
+               depart,
+               duty,
+               type,
+               start_date,
+               end_date,
+               remark
+        from assess_annual_vacation
+        where current_year = #{currentYear}
+          and depart = #{depart}
+          and status = '1'
+    </select>
+</mapper>

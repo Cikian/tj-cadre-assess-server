@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualArrangeMapper">
+
+    <delete id="deleteByMainId" parameterType="java.lang.String">
+        DELETE
+        FROM assess_annual_arrange
+        WHERE annual_fill_id = #{mainId}
+        </delete>
+
+    <select id="selectByMainId" parameterType="java.lang.String"
+            resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualArrange">
+        SELECT *
+        FROM assess_annual_arrange
+        WHERE annual_fill_id = #{mainId}
+    </select>
+    <select id="selectEvaluationNumByDepartId" resultType="java.lang.Integer">
+        SELECT vote_num
+        FROM assess_annual_arrange
+        WHERE annual_fill_id = #{fillId}
+    </select>
+
+    <select id="getAssessAnnualFillQuery" resultType="org.jeecg.modules.sys.dto.AssessAnnualArrangeDTO">
+        select depart,
+               people_num,
+               assess_scope,
+               assess_partin_num,
+               leaders,
+               non_assess,
+               remark,
+               contacts,
+               contacts_phone,
+               office_tel
+        from assess_annual_arrange
+        where depart = #{depart}
+    </select>
+    <select id="queryAllArrangeByYear" resultType="org.jeecg.modules.sys.dto.ArrangeDTO">
+        SELECT fill.depart, fill.depart_type, arrange.vote_a, arrange.vote_b, arrange.vote_c
+        FROM assess_annual_fill fill
+                 JOIN assess_annual_arrange arrange ON fill.id = arrange.annual_fill_id
+        WHERE fill.current_year = #{year}
+    </select>
+
+</mapper>

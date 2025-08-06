@@ -1,0 +1,22 @@
+package org.jeecg.modules.annual.vo;
+
+import lombok.Data;
+import org.jeecg.common.aspect.annotation.Dict;
+
+import java.util.Date;
+
+@Data
+public class DepartDemocraticVO {
+    @Dict(dictTable = "sys_depart", dicText = "alias", dicCode = "id")
+    private String departId;
+
+    @Dict(dicCode = "assess_uear")
+    private String currentYear;
+
+    @Dict(dictTable = "sys_user", dicText = "realname", dicCode = "id")
+    private String appraisee;
+
+    private String assessName;
+
+    private Date endDate;
+}

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.report.AssessReportNewLeaderMapper">
+
+    <select id="getNewLeaderSummaryByYear"
+            resultType="org.jeecg.modules.sys.dto.ReportNewLeaderDTO">
+        select distinct l.id,
+        l.name,
+        l.current_year,
+        s.depart,
+        l.original_position,
+        l.original_date,
+        l.current_position,
+        l.cur_date,
+        l.hash_id,
+        l.recognition_rate,
+        l.identity_rate,
+        l.disagreement_rate,
+        l.unknown_rate
+        from assess_report_evaluation_summary s
+        inner join assess_report_evaluation_newleader n on s.id = n.summary_id
+        inner join assess_report_new_leader l on n.new_leader_item = l.id
+        where s.current_year = #{year}
+        order by
+        <if test="column != null and 're' == column">
+            l.recognition_rate
+        </if>
+        <if test="column != null and 'di' == column">
+            l.disagreement_rate
+        </if>
+        <if test="column == null">
+            l.recognition_rate
+        </if>
+        <if test="sort != null and 'desc' == sort">
+            desc
+        </if>
+        <if test="sort != null and 'asc' == sort">
+            asc
+        </if>
+        <if test="sort == null">
+            desc
+        </if>
+
+    </select>
+</mapper>

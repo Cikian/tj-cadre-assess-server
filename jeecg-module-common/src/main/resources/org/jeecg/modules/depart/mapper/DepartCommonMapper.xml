@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.depart.mapper.DepartCommonMapper">
+
+
+    <select id="queryDepartLeaders" resultType="org.jeecg.modules.depart.dto.DepartLeadersDTO">
+        select distinct sys_user.id, sys_user.realname, sys_role.role_name
+        from sys_user_role
+                 inner join sys_role on sys_user_role.role_id = sys_role.id
+                 inner join sys_user_depart on sys_user_role.user_id = sys_user_depart.user_id
+                 inner join sys_user on sys_user.id = sys_user_role.user_id
+        where (sys_role.role_code = 'commissioner_chief'
+            or sys_role.role_code = 'commissioner_deputy')
+          and sys_user_depart.dep_id = #{departId}
+    </select>
+
+<!--    <select id="queryDepartLeadersAndRegularGrade" resultType="org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO">-->
+<!--        select distinct sys_user.id, sys_user.realname, sys_role.role_code, sys_role.role_name, quarter1, quarter2, quarter3, quarter4-->
+<!--        from sys_user_role-->
+<!--                 inner join sys_role on sys_user_role.role_id = sys_role.id-->
+<!--                 inner join sys_user_depart on sys_user_role.user_id = sys_user_depart.user_id-->
+<!--                 inner join sys_user on sys_user.id = sys_user_role.user_id-->
+<!--                 inner join assess_regular_report_item on assess_regular_report_item.name = sys_user.id-->
+<!--        where (sys_role.role_code = 'commissioner_chief'-->
+<!--            or sys_role.role_code = 'commissioner_deputy')-->
+<!--          and sys_user_depart.dep_id = #{departId}-->
+<!--          and assess_regular_report_item.current_year = #{year}-->
+<!--    </select>-->
+
+    <select id="queryDepartLeadersAndRegularGrade" resultType="org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO">
+        select distinct hash_id       as hash_id,
+                        name          as realname,
+                        position_type as role_code,
+                        position_type as role_name,
+                        quarter1,
+                        quarter2,
+                        quarter3,
+                        quarter4
+        from assess_regular_report_item
+        where department_code = #{departId}
+          and assess_regular_report_item.current_year = #{year}
+          and is_leader = 1
+    </select>
+    <select id="queryDepartLeadersByPage" resultType="org.jeecg.modules.system.entity.SysUser">
+        select distinct sys_user.id, sys_user.realname, sys_role.role_name, sys_user.username, sys_user.sex, sys_user.phone
+        from sys_user_role
+                 inner join sys_role on sys_user_role.role_id = sys_role.id
+                 inner join sys_user_depart on sys_user_role.user_id = sys_user_depart.user_id
+                 inner join sys_user on sys_user.id = sys_user_role.user_id
+        where (sys_role.role_code = 'commissioner_chief'
+            or sys_role.role_code = 'commissioner_deputy')
+          and sys_user_depart.dep_id = #{departId}
+        limit #{offset}, #{depth}
+    </select>
+    <select id="getDepartLeadersCount" resultType="java.lang.Integer">
+        select count(distinct sys_user.id)
+        from sys_user_role
+                 inner join sys_role on sys_user_role.role_id = sys_role.id
+                 inner join sys_user_depart on sys_user_role.user_id = sys_user_depart.user_id
+                 inner join sys_user on sys_user.id = sys_user_role.user_id
+        where (sys_role.role_code = 'commissioner_chief'
+            or sys_role.role_code = 'commissioner_deputy')
+          and sys_user_depart.dep_id = #{departId}
+    </select>
+    <select id="queryDepartLeaderAndRegularGrade"
+            resultType="org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO">
+        select distinct hash_id       as id,
+                        name          as realname,
+                        position_type as role_code,
+                        position_type as role_name,
+                        quarter1,
+                        quarter2,
+                        quarter3,
+                        quarter4
+        from assess_regular_report_item
+        where hash_id = #{hashId}
+          and current_year = #{year}
+    </select>
+
+</mapper>

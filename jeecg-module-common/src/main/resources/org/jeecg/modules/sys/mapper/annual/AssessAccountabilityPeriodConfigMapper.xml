@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAccountabilityPeriodConfigMapper">
+
+    <delete id="deleteByCode">
+        delete from assess_accountability_period_config
+        where type = #{code}
+    </delete>
+    <select id="getInfluenceTime" resultType="java.lang.Integer">
+        select assess_accountability_period_config.period
+        from sys_category
+                 inner join assess_accountability_period_config
+                            on sys_category.code = assess_accountability_period_config.type
+        where sys_category.id = #{id};
+    </select>
+</mapper>

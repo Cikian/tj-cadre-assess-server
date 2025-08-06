@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualExcellentNumMapper">
+
+    <select id="getInitLeaderData" resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualExcellentNum">
+        select sys_user.id       as leader,
+               sys_user.realname as name,
+               ratio.group_ratio,
+               ratio.bureau_ratio,
+               ratio.basic_ratio,
+               ratio.institution_ratio
+        from sys_user
+                 inner join assess_leader_depart_config on assess_leader_depart_config.leader_id = sys_user.id
+                 inner join assess_annual_excellent_ratio as ratio
+        where ratio.enable = 1
+    </select>
+</mapper>

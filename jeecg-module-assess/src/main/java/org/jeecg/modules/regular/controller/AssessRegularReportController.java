@@ -1,0 +1,1149 @@
+package org.jeecg.modules.regular.controller;
+
+import com.alibaba.fastjson.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.shiro.SecurityUtils;
+import org.jeecg.common.api.vo.Result;
+import org.jeecg.common.aspect.annotation.AutoLog;
+import org.jeecg.common.exception.JeecgBootException;
+import org.jeecg.common.system.query.QueryGenerator;
+import org.jeecg.common.system.vo.LoginUser;
+import org.jeecg.common.system.vo.SysDepartModel;
+import org.jeecg.common.util.TokenUtils;
+import org.jeecg.common.util.oConvertUtils;
+import org.jeecg.modules.annual.service.IAssessAnnualFillService;
+import org.jeecg.modules.business.service.IAssessBusinessDepartFillService;
+import org.jeecg.modules.common.entity.IndexAttache;
+import org.jeecg.modules.common.entity.IndexEmployee;
+import org.jeecg.modules.common.entity.IndexLeader;
+import org.jeecg.modules.depart.DepartCommonApi;
+import org.jeecg.modules.regular.dto.RegularExportDTO;
+import org.jeecg.modules.regular.dto.SurplusQuota;
+import org.jeecg.modules.regular.entity.AssessRegularReport;
+import org.jeecg.modules.regular.entity.AssessRegularReportItem;
+import org.jeecg.modules.regular.mapper.AssessRegularReportItemMapper;
+import org.jeecg.modules.regular.mapper.AssessRegularReportMapper;
+import org.jeecg.modules.regular.service.IAssessRegularReportItemService;
+import org.jeecg.modules.regular.service.IAssessRegularReportService;
+import org.jeecg.modules.regular.vo.AdjustDivisionsUnitsVO;
+import org.jeecg.modules.regular.vo.AssessRegularReportPage;
+import org.jeecg.modules.regular.vo.ConflictInfoVO;
+import org.jeecg.modules.regular.vo.RegularStartVO;
+import org.jeecg.modules.report.service.IAssessReportFillService;
+import org.jeecg.modules.sys.AssessCommonApi;
+import org.jeecg.modules.sys.entity.AssessCurrentAssess;
+import org.jeecg.modules.sys.entity.annual.AssessAssistConfig;
+import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
+import org.jeecg.modules.sys.mapper.AssessCurrentAssessMapper;
+import org.jeecg.modules.sys.mapper.annual.AssessAssistConfigMapper;
+import org.jeecg.modules.sys.mapper.business.AssessLeaderDepartConfigMapper;
+import org.jeecg.modules.system.entity.SysDepart;
+import org.jeecg.modules.utils.CommonUtils;
+import org.jeecgframework.poi.excel.def.NormalExcelConstants;
+import org.jeecgframework.poi.excel.entity.ExportParams;
+import org.jeecgframework.poi.excel.view.JeecgEntityExcelView;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+/**
+ * @Description: 平时考核填报
+ * @Author: admin
+ * @Date: 2024-08-30
+ * @Version: V1.0
+ */
+@Api(tags = "平时考核填报")
+@RestController
+@RequestMapping("/regular/report")
+@Slf4j
+public class AssessRegularReportController {
+    @Autowired
+    private IAssessRegularReportService assessRegularReportService;
+    @Autowired
+    private IAssessRegularReportItemService assessRegularReportItemService;
+    @Autowired
+    private AssessLeaderDepartConfigMapper assessLeaderDepartConfigMapper;
+    @Autowired
+    private AssessCommonApi assessCommonApi;
+    @Autowired
+    private DepartCommonApi departCommonApi;
+    @Autowired
+    private AssessAssistConfigMapper assessAssistConfigMapper;
+    @Autowired
+    private AssessCurrentAssessMapper assessCurrentAssessMapper;
+
+    @Autowired
+    private IAssessBusinessDepartFillService fillService;
+    @Autowired
+    private IAssessAnnualFillService assessAnnualFillService;
+    @Autowired
+    private IAssessReportFillService reportFillService;
+    @Autowired
+    private AssessRegularReportMapper assessRegularReportMapper;
+    @Autowired
+    private AssessRegularReportItemMapper assessRegularReportItemMapper;
+
+    /**
+     * 分页列表查询
+     *
+     * @param assessRegularReport
+     * @param pageNo
+     * @param pageSize
+     * @param req
+     * @return
+     */
+    //@AutoLog(value = "平时考核填报-分页列表查询")
+    @ApiOperation(value = "平时考核填报-分页列表查询", notes = "平时考核填报-分页列表查询")
+    @GetMapping(value = "/list")
+    public Result<IPage<AssessRegularReport>> queryPageList(AssessRegularReport assessRegularReport,
+                                                            @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
+                                                            @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize,
+                                                            HttpServletRequest req) {
+        QueryWrapper<AssessRegularReport> queryWrapper = QueryGenerator.initQueryWrapper(assessRegularReport, req.getParameterMap());
+        String[] arrs = new String[]{"current_year", "current_quarter"};
+        queryWrapper.orderByDesc(Arrays.asList(arrs));
+        boolean cadre = assessCommonApi.isCadre();
+        if (!cadre) {
+            Map<String, String> currentUserDepart = departCommonApi.getCurrentUserDepart();
+            queryWrapper.eq("department_code", currentUserDepart.get("departId"));
+        }
+
+        Map<String, String[]> parameterMap = req.getParameterMap();
+        if (parameterMap.get("currentYear") == null){
+            AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
+            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+                queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
+            }
+        }
+
+        queryWrapper.orderByDesc("create_time");
+        Page<AssessRegularReport> page = new Page<AssessRegularReport>(pageNo, pageSize);
+        IPage<AssessRegularReport> pageList = assessRegularReportService.page(page, queryWrapper);
+        return Result.OK(pageList);
+    }
+
+    /**
+     * 添加
+     *
+     * @param assessRegularReportPage
+     * @return
+     */
+    @AutoLog(value = "平时考核填报-添加")
+    @ApiOperation(value = "平时考核填报-添加", notes = "平时考核填报-添加")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:add")
+    @PostMapping(value = "/add")
+    public Result<String> add(@RequestBody AssessRegularReportPage assessRegularReportPage) {
+        AssessRegularReport assessRegularReport = new AssessRegularReport();
+        BeanUtils.copyProperties(assessRegularReportPage, assessRegularReport);
+        assessRegularReportService.saveMain(assessRegularReport, assessRegularReportPage.getAssessRegularReportItemList());
+        return Result.OK("添加成功！");
+    }
+
+    /**
+     * 编辑
+     *
+     * @param assessRegularReportPage
+     * @return
+     */
+    @AutoLog(value = "平时考核填报-编辑")
+    @ApiOperation(value = "平时考核填报-编辑", notes = "平时考核填报-编辑")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:edit")
+    @RequestMapping(value = "/edit", method = {RequestMethod.PUT, RequestMethod.POST})
+    public Result<String> edit(@RequestBody AssessRegularReportPage assessRegularReportPage) {
+
+        Map<String, String> currentUserDepart = departCommonApi.getCurrentUserDepart();
+        AssessRegularReport assessRegularReport = new AssessRegularReport();
+        BeanUtils.copyProperties(assessRegularReportPage, assessRegularReport);
+        AssessRegularReport assessRegularReportEntity = assessRegularReportService.getById(assessRegularReport.getId());
+        if (assessRegularReportEntity == null) {
+            return Result.error("未找到对应数据");
+        }
+        if (currentUserDepart == null) assessRegularReport.setReportBy("填报专员");
+        else assessRegularReport.setReportBy(currentUserDepart.get("alias") + "填报专员");
+        assessRegularReportService.updateMain(assessRegularReport, assessRegularReportPage.getAssessRegularReportItemList());
+        return Result.OK("操作成功!");
+    }
+
+    /**
+     * 审核通过
+     *
+     * @param id 平时考核报告ID
+     * @return 驳回成功！
+     */
+    @AutoLog(value = "平时考核填报-通过")
+    @ApiOperation(value = "平时考核填报-通过", notes = "平时考核填报-通过")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:add")
+    @GetMapping(value = "/approveRequest")
+    public Result<String> approveRequest(@RequestParam(name = "id", required = true) String id, @RequestParam(name = "name", required = true) String name) {
+        // 查询考核报告
+        AssessRegularReport regularReport = assessRegularReportMapper.selectById(id);
+
+        // 检查考核报告是否存在
+        if (regularReport == null) {
+            return Result.error("考核报告不存在！");
+        }
+
+        // 检查状态是否异常
+        if (!"2".equals(regularReport.getStatus())) {
+            return Result.error("当前考核状态异常，请稍后重试！");
+        }
+
+        // 获取当前的审核人信息
+        String currentAuditBy = regularReport.getAuditBy();
+        String updatedAuditBy;
+
+        // 判断当前审核人是否为空
+        if (currentAuditBy == null || currentAuditBy.isEmpty()) {
+            updatedAuditBy = name; // 如果为空，直接写入name
+        } else {
+            updatedAuditBy = currentAuditBy + "," + name; // 否则，加上逗号再连接name
+        }
+
+        // 更新状态为“3”
+        LambdaUpdateWrapper<AssessRegularReport> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(AssessRegularReport::getId, id)
+                .set(AssessRegularReport::getStatus, "3")
+                .set(AssessRegularReport::getAuditBy, updatedAuditBy); // 使用更新后的审核人信息
+
+        int update = assessRegularReportMapper.update(null, wrapper);
+        return update > 0 ? Result.ok("审核通过") : Result.error("通过失败，请重试！");
+    }
+
+    /**
+     * 退回
+     *
+     * @param id 平时考核报告ID
+     * @return 驳回成功！
+     */
+    @AutoLog(value = "平时考核填报-退回")
+    @ApiOperation(value = "平时考核填报-退回", notes = "平时考核填报-退回")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:add")
+    @GetMapping(value = "/reject")
+    public Result<String> rejectedAudit(@RequestParam(name = "id", required = true) String id) {
+        // 查询考核报告
+        AssessRegularReport regularReport = assessRegularReportMapper.selectById(id);
+        // 检查考核报告是否存在
+        if (regularReport == null) {
+            return Result.error("考核报告不存在！");
+        }
+        // 检查状态是否异常
+        if (!"2".equals(regularReport.getStatus())) {
+            return Result.error("当前考核状态异常，请稍后重试！");
+        }
+        // 更新状态为“4”
+        LambdaUpdateWrapper<AssessRegularReport> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(AssessRegularReport::getId, id)
+                .set(AssessRegularReport::getStatus, "4");
+        int update = assessRegularReportMapper.update(null, wrapper);
+        return update > 0 ? Result.ok("驳回成功") : Result.error("驳回失败，请重试！");
+    }
+
+    /**
+     * 通过id删除
+     *
+     * @param id
+     * @return
+     */
+    @AutoLog(value = "平时考核填报-通过id删除")
+    @ApiOperation(value = "平时考核填报-通过id删除", notes = "平时考核填报-通过id删除")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:delete")
+    @DeleteMapping(value = "/delete")
+    public Result<String> delete(@RequestParam(name = "id", required = true) String id) {
+        assessRegularReportService.delMain(id);
+        return Result.OK("删除成功!");
+    }
+
+    /**
+     * 批量删除
+     *
+     * @param ids
+     * @return
+     */
+    @AutoLog(value = "平时考核填报-批量删除")
+    @ApiOperation(value = "平时考核填报-批量删除", notes = "平时考核填报-批量删除")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:deleteBatch")
+    @DeleteMapping(value = "/deleteBatch")
+    public Result<String> deleteBatch(@RequestParam(name = "ids", required = true) String ids) {
+        this.assessRegularReportService.delBatchMain(Arrays.asList(ids.split(",")));
+        return Result.OK("批量删除成功！");
+    }
+
+    /**
+     * 通过id查询
+     *
+     * @param id
+     * @return
+     */
+    //@AutoLog(value = "平时考核填报-通过id查询")
+    @ApiOperation(value = "平时考核填报-通过id查询", notes = "平时考核填报-通过id查询")
+    @GetMapping(value = "/queryById")
+    public Result<AssessRegularReport> queryById(@RequestParam(name = "id", required = true) String id) {
+        AssessRegularReport assessRegularReport = assessRegularReportService.getById(id);
+        if (assessRegularReport == null) {
+            return Result.error("未找到对应数据");
+        }
+        return Result.OK(assessRegularReport);
+
+    }
+
+    /**
+     * 通过id查询
+     *
+     * @param id
+     * @return
+     */
+    //@AutoLog(value = "平时考核填报明细表通过主表ID查询")
+    @ApiOperation(value = "平时考核填报明细表主表ID查询", notes = "平时考核填报明细表-通主表ID查询")
+    @GetMapping(value = "/queryByMainId")
+    public Result<List<AssessRegularReportItem>> querySubByMainId(@RequestParam(name = "id", required = true) String id) {
+        List<AssessRegularReportItem> assessRegularReportItemList = assessRegularReportItemService.selectByMainId(id);
+        return Result.OK(assessRegularReportItemList);
+    }
+
+    @GetMapping(value = "/sublistRemainingSeats")
+    public SurplusQuota sublistRemainingSeats(@RequestParam(name = "id", required = true) String id) {
+        List<AssessRegularReportItem> assessRegularReportItemList = assessRegularReportItemService.selectByMainId(id);
+        QueryWrapper<AssessCurrentAssess> wrapper = new QueryWrapper<>();
+        wrapper.eq("assess", "regular");
+        List<AssessCurrentAssess> assessList = assessCurrentAssessMapper.selectList(wrapper);
+        String quarter = assessList.isEmpty() ? null : assessList.get(0).getQuarter();
+
+        int sum = Math.max((int) (assessRegularReportItemList.size() * 0.4), 1);
+        int count = sum - calculateCountByQuarter(assessRegularReportItemList, quarter);
+        return new SurplusQuota(sum, count);
+    }
+
+    /**
+     * 首页信息
+     */
+    @ApiOperation(value = "首页信息", notes = "首页信息")
+    @GetMapping(value = "/getIndexInfo")
+    public Result<IndexLeader> getAllItems() {
+        return Result.OK(new IndexLeader(assessRegularReportService.getAllItems(), fillService.getAllItems(), assessAnnualFillService.getAllItems(), reportFillService.getAllItems()));
+    }
+
+    /**
+     * 首页员工信息
+     */
+    @ApiOperation(value = "首页员工信息", notes = "首页信息")
+    @GetMapping(value = "/getPartial")
+    public Result<?> getPartial() {
+        Map<String, String> currentUserDepart = departCommonApi.getCurrentUserDepart();
+        String departType = departCommonApi.getDepartTypeByName(currentUserDepart.get("departName"));
+        AssessCurrentAssess regularInfo = assessCommonApi.getCurrentAssessInfo("regular");
+        AssessCurrentAssess businessInfo = assessCommonApi.getCurrentAssessInfo("business");
+        AssessCurrentAssess reportInfo = assessCommonApi.getCurrentAssessInfo("report");
+        AssessCurrentAssess annualInfo = assessCommonApi.getCurrentAssessInfo("annual");
+
+        if ("1".equals(departType)) {
+            return Result.OK(
+                    new IndexAttache(
+                            assessRegularReportService.getPartial(currentUserDepart.get("departId"), regularInfo),
+                            fillService.getPartial(currentUserDepart.get("departId"), businessInfo),
+                            assessAnnualFillService.getPartial(currentUserDepart.get("departId"), annualInfo),
+                            assessCommonApi.getCommissionItems())
+            );
+        } else {
+            return Result.OK(new IndexEmployee(
+                    fillService.getPartial(currentUserDepart.get("departId"), businessInfo),
+                    assessAnnualFillService.getPartial(currentUserDepart.get("departId"), annualInfo),
+                    reportFillService.getPartial(currentUserDepart.get("departId"), reportInfo),
+                    assessCommonApi.getCommissionItems()));
+        }
+
+    }
+
+    /**
+     * 导出excel
+     *
+     * @param request
+     * @param assessRegularReport
+     */
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:exportXls")
+    @RequestMapping(value = "/exportXls")
+    public ModelAndView exportXls(HttpServletRequest request, AssessRegularReport assessRegularReport) {
+        // Step.1 组装查询条件查询数据
+        QueryWrapper<AssessRegularReport> queryWrapper = QueryGenerator.initQueryWrapper(assessRegularReport, request.getParameterMap());
+        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+
+        //配置选中数据查询条件
+        String selections = request.getParameter("selections");
+        if (oConvertUtils.isNotEmpty(selections)) {
+            List<String> selectionList = Arrays.asList(selections.split(","));
+            queryWrapper.in("id", selectionList);
+        }
+        //Step.2 获取导出数据
+        List<AssessRegularReport> assessRegularReportList = assessRegularReportService.list(queryWrapper);
+
+        // Step.3 组装pageList
+        List<AssessRegularReportPage> pageList = new ArrayList<AssessRegularReportPage>();
+        for (AssessRegularReport main : assessRegularReportList) {
+            AssessRegularReportPage vo = new AssessRegularReportPage();
+            BeanUtils.copyProperties(main, vo);
+            List<AssessRegularReportItem> assessRegularReportItemList = assessRegularReportItemService.selectByMainId(main.getId());
+            vo.setAssessRegularReportItemList(assessRegularReportItemList);
+            pageList.add(vo);
+        }
+
+        // Step.4 AutoPoi 导出Excel
+        ModelAndView mv = new ModelAndView(new JeecgEntityExcelView());
+        mv.addObject(NormalExcelConstants.FILE_NAME, "平时考核填报列表");
+        mv.addObject(NormalExcelConstants.CLASS, AssessRegularReportPage.class);
+        mv.addObject(NormalExcelConstants.PARAMS, new ExportParams("平时考核填报数据", "导出人:" + sysUser.getRealname(), "平时考核填报"));
+        mv.addObject(NormalExcelConstants.DATA_LIST, pageList);
+        return mv;
+    }
+
+    /**
+     * 通过excel导入数据
+     *
+     * @param request
+     * @return
+     */
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:importExcel")
+    @RequestMapping(value = "/importExcel", method = RequestMethod.POST)
+    public Result<?> importExcel(HttpServletRequest request) {
+
+        String year = request.getHeader("year");
+        String quarter = request.getHeader("quarter");
+
+        String name = "regular_" + year + "_" + quarter;
+        List<AssessRegularReportItem> regular = assessCommonApi.importExcel(request, AssessRegularReportItem.class, name);
+
+        if (regular != null) {
+            return Result.OK("文件导入成功！数据行数:" + regular.size(), regular);
+        }
+
+        return Result.error("解析失败！");
+    }
+
+    /**
+     * 启动平时考核流程
+     *
+     * @param regularStartVO 传入的主表子表混合值
+     * @return null
+     */
+    @AutoLog(value = "启动平时考核流程")
+    @ApiOperation(value = "启动平时考核流程", notes = "启动平时考核流程")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:startProcess")
+    @PostMapping(value = "/startProcess")
+    public Result<ConflictInfoVO> startProcess(@RequestBody RegularStartVO regularStartVO) {
+        // 判断excel非空
+        assessRegularReportService.validateReportItems(regularStartVO.getReportItems());
+        // 获取Excel表中部门集合
+        Set<String> uniqueDepartmentCodes = assessRegularReportService.getUniqueDepartmentCodes(regularStartVO);
+        // 转义后的部门名称（判断部门是否存在）
+        Set<String> departmentNames = assessRegularReportService.getDepartmentNames(uniqueDepartmentCodes);
+
+        // 检查冲突
+        ConflictInfoVO conflictInfoVO = assessRegularReportService.checkForConflicts(regularStartVO);
+        if (conflictInfoVO != null) {
+            return Result.error("数据包含冲突项，请重新核对！", conflictInfoVO);
+        }
+
+        // 无冲突开始录入
+        assessRegularReportService.startProcess(regularStartVO, uniqueDepartmentCodes);
+
+        return Result.OK("启动平时考核流程成功！", null);
+    }
+
+    /**
+     * 冲突修复平时考核流程
+     *
+     * @param regularStartVO 传入的主表子表混合值
+     * @return null
+     */
+    @AutoLog(value = "解决冲突-启动平时考核流程")
+    @ApiOperation(value = "解决冲突-启动平时考核流程", notes = "解决冲突-启动平时考核流程")
+    //@RequiresPermissions("org.jeecg.modules:assess_regular_report:startProcess")
+    @PostMapping(value = "/conflictSolution")
+    public Result<ConflictInfoVO> conflictSolution(@RequestBody RegularStartVO regularStartVO) {
+        // 获取部门集合
+        Set<String> uniqueDepartmentCodes = assessRegularReportService.getUniqueDepartmentCodes(regularStartVO);
+
+        assessRegularReportService.mergeConflicts(regularStartVO.getConflictHashId());
+
+        assessRegularReportService.startProcess(regularStartVO, uniqueDepartmentCodes);
+
+        return Result.OK("启动平时考核流程成功！", null);
+    }
+
+    /**
+     * 查询局领导填报数据
+     *
+     * @param assessRegularReportItemLeader
+     * @param req
+     * @return
+     */
+    //@AutoLog(value = "局领导填报-分页列表查询")
+    @ApiOperation(value = "局领导填报-列表查询", notes = "局领导填报-列表查询")
+    @GetMapping(value = "/getLeaderData")
+    public Result<IPage<AssessRegularReportItem>> getLeaderData(AssessRegularReportItem assessRegularReportItemLeader, HttpServletRequest req) {
+        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+
+        // 初始化查询条件
+        QueryWrapper<AssessRegularReportItem> queryWrapper = QueryGenerator.initQueryWrapper(assessRegularReportItemLeader, req.getParameterMap());
+
+        // 非管理员用户，添加部门过滤
+        if (!sysUser.getUsername().equals("admin")) {
+            addDepartmentFilter(queryWrapper, sysUser.getId());
+        }
+
+        queryWrapper.eq("is_leader", "1");
+
+        // 查询所有记录，不再使用分页
+        List<AssessRegularReportItem> regularList = assessRegularReportItemMapper.selectList(queryWrapper);
+
+        // 过滤出年份比较大的数据
+        List<AssessRegularReportItem> records = filterLatestYearRecords(regularList);
+
+        // 如果不是管理员，添加辅助配置的记录
+        if (!sysUser.getUsername().equals("admin")) {
+            addAssistConfigRecords(records, sysUser.getId());
+        }
+
+        IPage<AssessRegularReportItem> pageList = new Page<>();
+        pageList.setRecords(records);
+
+        // 直接返回所有记录
+        return Result.OK(pageList);
+    }
+
+    @GetMapping(value = "/getDetailItem")
+    public Result<?> getDetailItem(@RequestParam(name = "type") String type) {
+
+        List<Map<String, Object>> detailItem = assessRegularReportService.getDetailItem(type);
+
+        // 直接返回所有记录
+        return Result.OK(detailItem);
+    }
+//分页.
+//    public Result<IPage<AssessRegularReportItem>> getLeaderData(AssessRegularReportItem assessRegularReportItemLeader,
+//                                                                @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
+//                                                                @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize,
+//                                                                HttpServletRequest req) {
+//        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+//
+//        // 初始化查询条件
+//        QueryWrapper<AssessRegularReportItem> queryWrapper = QueryGenerator.initQueryWrapper(assessRegularReportItemLeader, req.getParameterMap());
+//
+//        // 非管理员用户，添加部门过滤
+//        if (!sysUser.getUsername().equals("admin")) {
+//            addDepartmentFilter(queryWrapper, sysUser.getId());
+//        }
+//
+//        queryWrapper.eq("is_leader", "1");
+//
+//        // 分页查询
+//        Page<AssessRegularReportItem> page = new Page<>(pageNo, pageSize);
+//        IPage<AssessRegularReportItem> pageList = assessRegularReportItemService.page(page, queryWrapper);
+//
+//        // 过滤出年份比较大的数据
+//        List<AssessRegularReportItem> records = filterLatestYearRecords(pageList.getRecords());
+//
+//        // 如果不是管理员，添加辅助配置的记录
+//        if (!sysUser.getUsername().equals("admin")) {
+//            addAssistConfigRecords(records, sysUser.getId());
+//        }
+//
+//        pageList.setRecords(records);
+//        return Result.OK(pageList);
+//    }
+
+    /**
+     * 各领导管理部门信息
+     */
+    private void addDepartmentFilter(QueryWrapper<AssessRegularReportItem> queryWrapper, String leaderId) {
+        QueryWrapper<AssessLeaderDepartConfig> leaderWrapper = new QueryWrapper<>();
+        leaderWrapper.eq("leader_id", leaderId);
+
+        List<AssessLeaderDepartConfig> reports = assessLeaderDepartConfigMapper.selectList(leaderWrapper);
+        if (!reports.isEmpty()) {
+            String depart = reports.get(0).getDepartId();
+            List<String> departList = Arrays.asList(depart.split(","));
+            queryWrapper.in("department_code", departList);
+        }
+    }
+
+    /**
+     * 查找最新年度信息
+     */
+    private List<AssessRegularReportItem> filterLatestYearRecords(List<AssessRegularReportItem> records) {
+        // 找出最大的年份
+        int bigYear = records.stream()
+                .map(record -> Integer.parseInt(record.getCurrentYear()))
+                .max(Integer::compare)
+                .orElse(0);
+
+        // 过滤出最大年份的数据
+        return records.stream()
+                .filter(record -> record.getCurrentYear().equals(String.valueOf(bigYear)))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 添加辅助人员信息
+     */
+    private void addAssistConfigRecords(List<AssessRegularReportItem> records, String leaderId) {
+        QueryWrapper<AssessAssistConfig> assistConfigQueryWrapper = new QueryWrapper<>();
+
+        // 使用 LIKE 进行模糊匹配
+        assistConfigQueryWrapper.like("leader", leaderId);
+
+        List<AssessAssistConfig> report = assessAssistConfigMapper.selectList(assistConfigQueryWrapper);
+        List<String> hashIds = report.stream()
+                .map(AssessAssistConfig::getHashId)
+                .collect(Collectors.toList());
+
+        // 查询匹配的所有记录并添加
+        if (!hashIds.isEmpty()) {
+            QueryWrapper<AssessRegularReportItem> hashIdWrapper = new QueryWrapper<>();
+            hashIdWrapper.in("hash_id", hashIds);
+
+            // 查询额外的记录
+            List<AssessRegularReportItem> additionalRecords = assessRegularReportItemService.list(hashIdWrapper);
+
+            // 将不在 records 中的额外记录添加到 records 中
+            for (AssessRegularReportItem additionalRecord : additionalRecords) {
+                if (!records.stream().anyMatch(record -> record.getHashId().equals(additionalRecord.getHashId()))) {
+                    records.add(additionalRecord);
+                }
+            }
+        }
+    }
+
+    /**
+     * 计算剩余名额
+     *
+     * @param
+     * @return
+     */
+    @GetMapping(value = "/computeRemainingSeats")
+    public SurplusQuota computeRemainingSeats() {
+
+        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+        QueryWrapper<AssessCurrentAssess> wrapper = new QueryWrapper<>();
+        wrapper.eq("assess", "regular");
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
+
+        QueryWrapper<AssessRegularReportItem> queryWrapper = new QueryWrapper<>();
+        if (!"admin".equals(sysUser.getUsername())) {
+            // 获取处室id
+            String depart = getDepartmentIdByLeaderId(sysUser.getId());
+            if (depart != null) {
+                List<String> departList = Arrays.asList(depart.split(","));
+                queryWrapper.in("department_code", departList);
+            }
+        }
+
+        queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
+
+        queryWrapper.eq("is_leader", "1");
+        List<AssessRegularReportItem> reportItems = assessRegularReportItemMapper.selectList(queryWrapper);
+        List<AssessCurrentAssess> assessList = assessCurrentAssessMapper.selectList(wrapper);
+        String quarter = assessList.isEmpty() ? null : assessList.get(0).getQuarter();
+
+        if (!"admin".equals(sysUser.getUsername())) {
+            addAssistConfigRecords(reportItems, sysUser.getId());
+        }
+
+        int sum = (int) (reportItems.size() * 0.4);
+        int count = sum - calculateCountByQuarter(reportItems, quarter);
+
+        return new SurplusQuota(sum, count);
+    }
+
+    // 获取部门ID
+    private String getDepartmentIdByLeaderId(String leaderId) {
+        QueryWrapper<AssessLeaderDepartConfig> leaderWrapper = new QueryWrapper<>();
+        leaderWrapper.eq("leader_id", leaderId);
+        List<AssessLeaderDepartConfig> reports = assessLeaderDepartConfigMapper.selectList(leaderWrapper);
+        return reports.isEmpty() ? null : reports.get(0).getDepartId();
+    }
+
+    // 基于季度计算计数
+    private int calculateCountByQuarter(List<AssessRegularReportItem> reportItems, String quarter) {
+        if (quarter == null) throw new JeecgBootException("当前季度未有信息！");
+
+        return (int) reportItems.stream()
+                .filter(item -> {
+                    switch (quarter) {
+                        case "1":
+                            return "A".equals(item.getQuarter1());
+                        case "2":
+                            return "A".equals(item.getQuarter2());
+                        case "3":
+                            return "A".equals(item.getQuarter3());
+                        case "4":
+                            return "A".equals(item.getQuarter4());
+                        default:
+                            return false;
+                    }
+                })
+                .count();
+    }
+
+
+    /**
+     * 局领导填报
+     *
+     * @param jsonObject
+     * @return
+     */
+    @AutoLog(value = "局领导填报-上报考核成绩")
+    @ApiOperation(value = "局领导填报-上报考核成绩", notes = "局领导填报-上报考核成绩")
+    @RequestMapping(value = "/editLeader", method = {RequestMethod.PUT, RequestMethod.POST})
+    public Result<String> editLeader(@RequestBody JSONObject jsonObject) {
+
+        String id = jsonObject.getString("id");
+        String field = jsonObject.getString("field");
+        String value = jsonObject.getString("value");
+
+        // 判断优秀比例是否超出
+        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+        // 获取评估报告项
+//        List<AssessRegularReportItem> items = getAssessRegularReportItems(sysUser);
+//         检查优秀比例是否超过40%
+//        if (isExceedingGoodPercentage(items, field)) {
+//            return Result.OK(buildErrorMessage(items, field));
+//        }
+
+        // 检查 hashId 是否在 assess_assist_config 表中存在
+        QueryWrapper<AssessAssistConfig> assistConfigQueryWrapper = new QueryWrapper<>();
+        assistConfigQueryWrapper.eq("hash_id", assessRegularReportItemService.getById(id).getHashId());
+        AssessAssistConfig assistConfigs = assessAssistConfigMapper.selectOne(assistConfigQueryWrapper);
+
+        if (assistConfigs != null) {
+            AssessRegularReportItem regularReportItem = assessRegularReportItemService.getById(id);
+            // 使用反射获取现有值
+            String existingValue = getExistingValueByField(regularReportItem, field);
+
+            if (existingValue == null) {
+                // 如果原值为 null，直接更新为 value
+                UpdateWrapper<AssessRegularReportItem> updateWrapper = new UpdateWrapper<>();
+                updateWrapper.eq("id", id).set(field, value);
+                updateWrapper.set("status", "3");
+                assessRegularReportItemService.update(updateWrapper);
+            } else {
+                // 如果原值不为 null，进行比较
+                if (isNewValueGreater(existingValue, value)) {
+                    UpdateWrapper<AssessRegularReportItem> updateWrapper = new UpdateWrapper<>();
+                    updateWrapper.eq("id", id).set(field, value);
+                    updateWrapper.set("status", "3");
+                    assessRegularReportItemService.update(updateWrapper);
+                }
+            }
+        } else {
+            // 更新评估报告项
+            UpdateWrapper<AssessRegularReportItem> updateWrapper = new UpdateWrapper<>();
+            updateWrapper.eq("id", id).set(field, value);
+            updateWrapper.set("status", "3");
+            assessRegularReportItemService.update(updateWrapper);
+        }
+
+        return Result.OK("操作成功!");
+    }
+
+    // 根据 field 获取现有值 (使用反射)
+    private String getExistingValueByField(AssessRegularReportItem item, String field) {
+        // 获取 field 的最后一位数字
+        char lastChar = field.charAt(field.length() - 1);
+        String methodName = "getQuarter" + lastChar; // 生成方法名，例如 getQuarter1
+
+        try {
+            // 使用反射调用方法
+            Method method = AssessRegularReportItem.class.getMethod(methodName);
+            return (String) method.invoke(item); // 调用方法并返回结果
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+            e.printStackTrace();
+            return null; // 如果发生异常，返回 null
+        }
+    }
+
+    // 辅助方法：判断新值是否比旧值大
+    private boolean isNewValueGreater(String existingValue, String newValue) {
+        // 定义等级顺序
+//        String[] levels = {"F", "E", "D", "C", "B", "A"};
+//
+//        int newIndex = Arrays.asList(levels).indexOf(newValue);
+//        int existingIndex = Arrays.asList(levels).indexOf(existingValue);
+
+        char newValueChar = newValue.charAt(0);
+        char existingValueChar = existingValue.charAt(0);
+
+        return newValueChar < existingValueChar;
+    }
+
+    // 查询对应记录
+    private List<AssessRegularReportItem> getAssessRegularReportItems(LoginUser sysUser) {
+        QueryWrapper<AssessRegularReportItem> queryWrapper = new QueryWrapper<>();
+
+        // todo: 需要查询特殊人员
+        if (sysUser.getUsername().equals("admin")) {
+            // 如果是 admin 用户，获取所有记录
+            return assessRegularReportItemService.list(new QueryWrapper<>());
+        }
+
+        QueryWrapper<AssessLeaderDepartConfig> leaderWrapper = new QueryWrapper<>();
+        leaderWrapper.eq("leader_id", sysUser.getId());
+
+        // 获取部门ID列表
+        List<AssessLeaderDepartConfig> reports = assessLeaderDepartConfigMapper.selectList(leaderWrapper);
+
+        String depart = reports.isEmpty() ? "" : reports.get(0).getDepartId();
+        List<String> departList = Arrays.asList(depart.split(","));
+
+        queryWrapper.eq("is_leader", "1");
+        queryWrapper.in("department_code", departList);
+
+
+        // 获取评估报告项列表
+        return assessRegularReportItemService.list(queryWrapper);
+    }
+
+    // 检查优秀比例是否超过40%
+    private boolean isExceedingGoodPercentage(List<AssessRegularReportItem> items, String field) {
+        long goodCount = calculateGoodCount(items, field);
+        long totalCount = items.size();
+        return totalCount > 0 && (goodCount * 100 / totalCount) > 40;
+    }
+
+    // 根据优秀比例构建错误消息
+    private String buildErrorMessage(List<AssessRegularReportItem> items, String field) {
+        long goodCount = calculateGoodCount(items, field);
+        long totalCount = items.size();
+        int sum = (int) (totalCount * 0.4);
+        int count = sum - (int) goodCount;
+        return "优秀比例超过40%，总名额" + sum + "个，剩余" + count + "个";
+    }
+
+    // 计算“A”的个数
+    private long calculateGoodCount(List<AssessRegularReportItem> items, String field) {
+        return items.stream()
+                .filter(item -> "A".equals(getQuarterValue(item, field)))
+                .count();
+    }
+
+    // 根据字段获取对应季度的值
+    private String getQuarterValue(AssessRegularReportItem item, String field) {
+        switch (field) {
+            case "quarter1":
+                return item.getQuarter1();
+            case "quarter2":
+                return item.getQuarter2();
+            case "quarter3":
+                return item.getQuarter3();
+            case "quarter4":
+                return item.getQuarter4();
+            default:
+                throw new JeecgBootException("没有当前季度信息！");
+        }
+    }
+
+    /**
+     * 查询调整项
+     */
+    @AutoLog(value = "查询调整项")
+    @ApiOperation(value = "查询调整项", notes = "查询调整项")
+    @GetMapping(value = "/selectAdjustment")
+    public Result<List<AssessRegularReportItem>> selectAdjustment() {
+        // 检查当前年度考核是否存在
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
+        if (currentAssessInfo == null) {
+            throw new JeecgBootException("当前考核未开始！");
+        }
+
+        // 创建查询包装器
+        LambdaQueryWrapper<AssessRegularReportItem> queryWrapper = new LambdaQueryWrapper<>();
+
+        // 设置查询条件
+        queryWrapper.eq(AssessRegularReportItem::getCurrentYear, currentAssessInfo.getCurrentYear()).orderByAsc(AssessRegularReportItem::getDepartmentCode);
+
+        // 执行查询
+        List<AssessRegularReportItem> assessRegularReportItems = assessRegularReportItemMapper.selectList(queryWrapper);
+
+        // 更新每个报告项的部门名称
+        assessRegularReportItems.forEach(regularReportItem -> {
+            String departId = regularReportItem.getDepartmentCode();
+            SysDepart sysDepart = departCommonApi.queryDepartById(departId);
+            if (sysDepart != null) {
+                regularReportItem.setDepartmentCode(sysDepart.getDepartName());
+            }
+        });
+
+        return Result.OK("查询成功！", assessRegularReportItems);
+    }
+
+    /**
+     * 新增调整项
+     */
+    @AutoLog(value = "新增调整项")
+    @ApiOperation(value = "新增调整项", notes = "新增调整项")
+    @PostMapping(value = "/addAdjustmentItem")
+    public Result<String> addAdjustmentItem(@RequestBody AssessRegularReportItem reportItem) {
+        // 是否存在当前年度考核
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
+        if (currentAssessInfo == null) {
+            throw new JeecgBootException("当前考核未开始！");
+        }
+        LambdaQueryWrapper<AssessRegularReport> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(AssessRegularReport::getDepartmentCode, reportItem.getDepartmentCode());
+        AssessRegularReport assessRegularReport = assessRegularReportService.getOne(queryWrapper);
+        // 解析字符串为ZonedDateTime
+        ZonedDateTime zonedDateTime = ZonedDateTime.parse(reportItem.getBirthDate());
+
+        // 定义输出格式
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+        // 格式化为所需的字符串格式
+        String output = zonedDateTime.format(formatter);
+        String fillId = IdWorker.getIdStr();
+        reportItem.setId(fillId);
+        reportItem.setMainId(assessRegularReport.getId());
+        reportItem.setBirthDate(output);
+        reportItem.setCurrentYear(currentAssessInfo.getCurrentYear());
+        String sex = 1 == reportItem.getSex() ? "男" : "女";
+        reportItem.setHashId(CommonUtils.hashId(reportItem.getName(), sex, output));
+        reportItem.setIsLeader("true".equals(reportItem.getIsLeader()) ? "1" : "0");
+
+        assessRegularReportItemMapper.insert(reportItem);
+
+        return Result.OK("添加成功！");
+    }
+
+    /**
+     * 删除调整项
+     */
+    @AutoLog(value = "删除调整项")
+    @ApiOperation(value = "删除调整项", notes = "删除调整项")
+    @DeleteMapping(value = "/deleteAdjustment")
+    public Result<String> deleteAdjustment(@RequestParam(name = "idsToDelete", required = true) String idsToDelete) {
+        // 检查 ID 列表是否为空
+        List<String> idsToDeleteList = Arrays.asList(idsToDelete.split(","));
+
+        if (idsToDelete.isEmpty()) {
+            return Result.OK("ID 列表不能为空！");
+        }
+        // 执行批量删除操作
+        int deletedCount = assessRegularReportItemMapper.deleteBatchIds(idsToDeleteList);
+
+        // 根据删除结果返回相应的消息
+        if (deletedCount > 0) {
+            return Result.OK("删除成功！共删除 " + deletedCount + " 条记录。");
+        } else {
+            return Result.OK("删除失败，可能没有匹配的记录！");
+        }
+    }
+
+    /**
+     * 调整处室（单位）
+     */
+    @AutoLog(value = "新增调整项")
+    @ApiOperation(value = "新增调整项", notes = "新增调整项")
+    @PostMapping(value = "/adjustDivisionsUnits")
+    public Result<String> adjustDivisionsUnits(@RequestBody(required = false) AdjustDivisionsUnitsVO adjustVO) {
+        String id=adjustVO.getId();
+        String departmentCode=adjustVO.getDepartmentCode();
+        LambdaQueryWrapper<AssessRegularReportItem> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(AssessRegularReportItem::getId, id);
+        List<AssessRegularReportItem> regularReportItemList = assessRegularReportItemMapper.selectList(queryWrapper);
+
+        AssessRegularReportItem assessRegularReportItem=regularReportItemList.get(0);
+        String mainId=assessRegularReportItem.getMainId();
+        AssessRegularReport assessRegularReport=assessRegularReportService.getById(mainId);
+        String currentYear=assessRegularReport.getCurrentYear();
+        String quarter=assessRegularReport.getCurrentQuarter();
+
+        LambdaQueryWrapper<AssessRegularReport> regularWrapper = new LambdaQueryWrapper<>();
+        regularWrapper.eq(AssessRegularReport::getCurrentYear,currentYear).eq(AssessRegularReport::getCurrentQuarter,quarter).eq(AssessRegularReport::getDepartmentCode,departmentCode);
+        List<AssessRegularReport> assessRegularReportList = assessRegularReportService.list(regularWrapper);
+        if (assessRegularReportList.size()>0){
+            AssessRegularReport destAssessRegularReport=assessRegularReportList.get(0);
+            String destMainId=destAssessRegularReport.getId();
+            assessRegularReportItem.setMainId(destMainId);
+            assessRegularReportItem.setDepartmentCode(adjustVO.getDepartmentCode());
+            assessRegularReportItemMapper.updateById(assessRegularReportItem);
+        }
+        return Result.OK("调整成功");
+    }
+
+
+    public JSONObject regularExport(String exportType) {
+        // 获取当前年度考核
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
+        if (currentAssessInfo == null || !currentAssessInfo.isAssessing()) {
+            throw new JeecgBootException("当前考核未开始！");
+        }
+
+        List<RegularExportDTO> exportDTOS;
+
+        // 根据 exportType 获取不同类型的数据
+        switch (exportType) {
+            case "employee":
+                exportDTOS = assessRegularReportItemMapper.getAllEmployee(currentAssessInfo.getCurrentYear());
+                break;
+            case "cadres":
+                exportDTOS = assessRegularReportItemMapper.getAllCadres(currentAssessInfo.getCurrentYear());
+                break;
+            case "clerk":
+                exportDTOS = assessRegularReportItemMapper.getAllClerk(currentAssessInfo.getCurrentYear());
+                break;
+            default:
+                throw new IllegalArgumentException("无效的导出类型");
+        }
+
+        List<SysDepartModel> sysDepartModels = departCommonApi.queryAllDepart();
+        Map<String, String> departMap = sysDepartModels.stream()
+                .collect(Collectors.toMap(SysDepartModel::getId, SysDepartModel::getDepartName));
+
+        List<RegularExportDTO> list = IntStream.range(0, exportDTOS.size())
+                .mapToObj(i -> {
+                    RegularExportDTO exportDTO = exportDTOS.get(i);
+                    RegularExportDTO newExportDTO = new RegularExportDTO();
+                    // 复制属性
+                    BeanUtils.copyProperties(exportDTO, newExportDTO);
+                    newExportDTO.setId(String.valueOf(i + 1)); // 设置 id
+                    if (newExportDTO.getPositionType() == null) {
+                        newExportDTO.setPositionType(" ");
+                    }
+                    newExportDTO.setSex("1".equals(newExportDTO.getSex()) ? "男" : "女");
+                    for (int j = 1; j <= 4; j++) {
+                        try {
+                            // 使用反射获取对应的季度值并进行转换
+                            Method getMethod = newExportDTO.getClass().getMethod("getQuarter" + j);
+                            Method setMethod = newExportDTO.getClass().getMethod("setQuarter" + j, getMethod.getReturnType());
+
+                            Object quarterValue = getMethod.invoke(newExportDTO);
+                            if (quarterValue != null) {
+                                Object convertedValue = convertQuarter((String) quarterValue);
+                                setMethod.invoke(newExportDTO, convertedValue);
+                            }
+                        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                            // 处理异常，例如记录日志
+                            e.printStackTrace();
+                        }
+                    }
+                    newExportDTO.setDepartmentCode(departMap.get(exportDTO.getDepartmentCode())); // 设置部门名称
+                    return newExportDTO;
+                })
+                .collect(Collectors.toList());
+
+        JSONObject json = new JSONObject();
+        json.put("data", list);
+
+        return json;
+    }
+
+    private String convertQuarter(String quarter) {
+        switch (quarter) {
+            case "A":
+                return "好";
+            case "B":
+                return "较好";
+            case "C":
+                return "一般";
+            case "D":
+                return "较差";
+            default:
+                return "不确定";
+        }
+    }
+
+    /**
+     * 导出平时考核部员信息
+     */
+    @AutoLog(value = "导出平时考核部员信息")
+    @ApiOperation(value = "导出平时考核部员信息", notes = "导出平时考核部员信息")
+    @GetMapping(value = "/regularEmployeeExport")
+    public JSONObject regularEmployeeExport() {
+        return regularExport("employee");
+    }
+
+    /**
+     * 导出平时考核干部信息
+     */
+    @AutoLog(value = "导出平时考核干部信息")
+    @ApiOperation(value = "导出平时考核干部信息", notes = "导出平时考核干部信息")
+    @GetMapping(value = "/regularCadresExport")
+    public JSONObject regularCadresExport() {
+        return regularExport("cadres");
+    }
+
+    /**
+     * 导出平时考核全部信息
+     */
+    @AutoLog(value = "导出平时考核全部信息")
+    @ApiOperation(value = "导出平时考核全部信息", notes = "导出平时考核全部信息")
+    @GetMapping(value = "/regularClerkExport")
+    public JSONObject regularClerkExport() {
+        return regularExport("clerk");
+    }
+
+    public void exportExcel(@RequestParam String type, @Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
+        String url = "http://localhost:" + port + "/jmreport/exportAllExcelStream" + "?token=" + TokenUtils.getTokenByRequest(request);
+        JSONObject queryParam = new JSONObject();
+        Map<String, Object> param = new JSONObject();
+
+        String excelConfigId;
+        String filename;
+
+        switch (type) {
+            case "employee":
+                excelConfigId = "1023744054384304128";
+                filename = "平时考核职员信息清单.xlsx";
+                break;
+            case "cadres":
+                excelConfigId = "1023741899715813376";
+                filename = "平时考核干部信息清单.xlsx";
+                break;
+            case "clerk":
+                excelConfigId = "1023737654081921024";
+                filename = "平时考核全部信息清单.xlsx";
+                break;
+            default:
+                throw new IllegalArgumentException("无效的导出类型");
+        }
+
+        param.put("excelConfigId", excelConfigId);
+        param.put("queryParam", queryParam);
+        assessCommonApi.getExportExcel(url, filename, param, response);
+    }
+
+    @GetMapping("/exportEmployeeExcel")
+    public void exportEmployeeExcel(@Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
+        exportExcel("employee", port, request, response);
+    }
+
+    @GetMapping("/exportCadresExcel")
+    public void exportCadresExcel(@Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
+        exportExcel("cadres", port, request, response);
+    }
+
+    @GetMapping("/exportClerkExcel")
+    public void exportClerkExcel(@Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
+        exportExcel("clerk", port, request, response);
+    }
+
+}

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.business.AssessBusinessGradeMapper">
+
+    <update id="updateRankingByYear">
+        update assess_business_grade
+        set ranking = (select ranking
+                       from (SELECT fs.id,
+                                    (@cur_rank := @cur_rank + 1) AS ranking
+                             FROM assess_business_grade fs,
+                                  (SELECT @cur_rank := 0) r
+                             WHERE fs.current_year = #{currentYear}
+                             ORDER BY score DESC) as t
+                       where t.id = assess_business_grade.id
+                         AND current_year = #{currentYear})
+        WHERE current_year = #{currentYear};
+    </update>
+    <update id="updateLevelByYear">
+        update assess_business_grade
+        set level =
+                case
+                    when ranking <![CDATA[ <= ]]> (SELECT t.total
+                                     from (select count(*) * #{excellent} as 'total'
+                                           from assess_business_grade
+                                           where current_year = #{currentYear}) t) then 1
+                    when ranking <![CDATA[ > ]]> (SELECT a.total
+                                     from (select count(*) * (#{fine} <![CDATA[ + ]]> #{excellent}) as 'total'
+                                           from assess_business_grade
+                                           where current_year = #{currentYear}) a) then 3
+                    else 2
+                    end
+        where current_year = #{currentYear}
+          and man_edit = 0;
+    </update>
+
+
+    <select id="getExcellentCount" resultType="java.lang.Integer">
+        select count(*)
+        from assess_business_grade
+        where current_year = #{currentYear}
+        and level = 1
+        and depart_type in
+        <foreach collection="type" item="t" open="(" separator="," close=")">
+            #{t}
+        </foreach>
+    </select>
+    <select id="getGoodCount" resultType="java.lang.Integer">
+        select count(*)
+        from assess_business_grade
+        where current_year = #{currentYear}
+          and level = 2
+        and depart_type in
+        <foreach collection="type" item="t" open="(" separator="," close=")">
+            #{t}
+        </foreach>
+    </select>
+    <select id="getGeneralCount" resultType="java.lang.Integer">
+        select count(*)
+        from assess_business_grade
+        where current_year = #{currentYear}
+        and level = 3
+        and depart_type in
+        <foreach collection="type" item="t" open="(" separator="," close=")">
+            #{t}
+        </foreach>
+    </select>
+    <select id="getReportQuery" resultType="org.jeecg.modules.sys.dto.AssessBusinessGradeDTO">
+        SELECT current_year, depart_id, score, level, depart_type, (@curRank := @curRank + 1) as ranking_virtual
+        FROM assess_business_grade,
+        (SELECT @curRank := 0) r
+        where current_year = #{currentYear}
+        and depart_type in
+        <foreach collection="departType" item="type" open="(" separator="," close=")">
+            #{type}
+        </foreach>
+        ORDER BY score desc
+    </select>
+    <select id="queryBusinessGradeByDepartIds"
+            resultType="org.jeecg.modules.sys.entity.business.AssessBusinessGrade">
+        select *
+        from assess_business_grade
+        where depart_id in
+        <foreach collection="departIds" item="departId" open="(" separator="," close=")">
+            #{departId}
+        </foreach>
+        and
+        current_year = #{year}
+    </select>
+    <select id="getDepartReportQuery" resultType="org.jeecg.modules.sys.dto.AssessBusinessDepartGradeDTO">
+        SELECT current_year,
+               depart_id,
+               assess_score,
+               score,
+               add_points,
+               subtract_points,
+               level,
+               depart_type,
+               ranking,
+               add_reason,
+               subtract_reason
+        FROM assess_business_grade
+        where current_year = #{currentYear}
+          and depart_id = #{departId}
+    </select>
+    <select id="getDepartIdsByScope" resultType="java.lang.String">
+        select depart_id
+        from assess_business_grade
+        where current_year = #{currentYear}
+        and depart_type in
+        <foreach collection="scope" item="i" open="(" separator="," close=")">
+            #{i}
+        </foreach>
+    </select>
+    <select id="selectByDepartTypeNotEqualTo" resultType="org.jeecg.modules.sys.entity.business.AssessBusinessGrade">
+        SELECT * FROM assess_business_grade WHERE depart_type != #{departType} AND current_year = #{year} AND depart_type IS NOT NULL
+    </select>
+
+    <select id="getSummary" parameterType="java.lang.String" resultType="org.jeecg.modules.sys.dto.GradeExportDTO">
+        SELECT abc.current_year,
+        abc.depart_id,
+        sd.alias AS alias,
+        abc.add_points,
+        abc.add_reason,
+        abc.subtract_points,
+        abc.subtract_reason,
+        abc.assess_score,
+        abc.score,
+        abc.ranking,
+        abc.level
+        FROM assess_business_grade abc
+        JOIN
+        sys_depart sd ON abc.depart_id = sd.id
+        WHERE abc.current_year = #{year}
+        AND sd.depart_type in
+        <foreach collection="departType" item="i" open="(" separator="," close=")">
+            #{i}
+        </foreach>
+        ORDER BY sd.depart_order
+    </select>
+</mapper>

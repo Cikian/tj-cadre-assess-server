@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.business.AssessBusinessDepartFillMapper">
+
+    <select id="getAllItems" parameterType="java.lang.String"
+            resultType="org.jeecg.modules.sys.dto.BusinessFieldDTO">
+        SELECT assess_name, current_year, deadline, report_depart, assess_depart, status
+        FROM assess_business_depart_fill
+        WHERE current_year = #{currentYear}</select>
+
+</mapper>

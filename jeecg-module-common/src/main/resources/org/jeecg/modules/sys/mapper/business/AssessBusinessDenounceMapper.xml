@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.business.AssessBusinessDenounceMapper">
+
+    <select id="getAllDenounce" resultType="org.jeecg.modules.sys.dto.DenounceExportDTO">
+        SELECT
+            abc.current_year,
+            sd.alias AS alias,
+            abc.denounce_unit,
+            abc.denounce_project,
+            abc.denounce_time
+        FROM
+            assess_business_denounce abc
+                JOIN
+            sys_depart sd ON abc.department_code = sd.id
+        WHERE
+            abc.status = 0;
+    </select>
+
+    <select id="getDepartDenounce" parameterType="java.lang.String" resultType="org.jeecg.modules.sys.dto.DenounceExportDTO">
+        SELECT
+            abc.current_year,
+            sd.alias AS alias,
+            abc.denounce_unit,
+            abc.denounce_project,
+            abc.denounce_time
+        FROM
+            assess_business_denounce abc
+                JOIN
+            sys_depart sd ON abc.department_code = sd.id
+        WHERE
+            abc.status = 0
+         AND abc.department_code = #{departId};
+    </select>
+
+</mapper>

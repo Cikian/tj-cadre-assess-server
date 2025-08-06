@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualDemocraticConfigMapper">
+    <select id="getLastVersionOptionsByType" resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualDemocraticConfig">
+        select weight_a, weight_b, weight_c, weight_d
+        from assess_annual_democratic_config
+        where type = #{type}
+        ORDER BY create_time DESC
+        LIMIT 1
+    </select>
+    <select id="getLastVersions" resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualDemocraticConfig">
+        SELECT a.*
+        FROM assess_annual_democratic_config a
+        LEFT JOIN assess_annual_democratic_config b ON a.type = b.type AND COALESCE(a.update_time, a.create_time) <![CDATA[ < ]]> COALESCE(b.update_time, b.create_time)
+        WHERE b.id IS NULL;
+    </select>
+</mapper>

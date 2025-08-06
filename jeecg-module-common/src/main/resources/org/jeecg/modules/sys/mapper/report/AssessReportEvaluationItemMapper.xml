@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.report.AssessReportEvaluationItemMapper">
+
+	<delete id="deleteByMainId" parameterType="java.lang.String">
+		DELETE
+		FROM assess_report_evaluation_item
+		WHERE summary_id = #{mainId}    </delete>
+
+	<select id="selectByMainId" parameterType="java.lang.String" resultType="org.jeecg.modules.sys.entity.report.AssessReportEvaluationItem">
+		SELECT *
+		FROM assess_report_evaluation_item
+		WHERE summary_id = #{mainId}    </select>
+<!--    <select id="getRankingByUpdate" resultType="org.jeecg.modules.sys.dto.ReportDemocracyGoodNum">-->
+<!--        select summary_id,-->
+<!--        COUNT(*) as total,-->
+<!--        SUM(case when fill = 'A' then 1 else 0 end) as good,-->
+<!--        (SUM(case when fill = 'A' then 1 else 0 end)) / (COUNT(*)) as rate,-->
+<!--        RANK() OVER (ORDER BY (SUM(case when fill = 'A' then 1 else 0 end)) / (COUNT(*)) DESC) as ranking-->
+<!--        from assess_report_evaluation_item-->
+<!--        where input_type = '1'-->
+<!--        and summary_id in-->
+<!--        <foreach collection="summaryIds" item="id" open="(" separator="," close=")">-->
+<!--            #{id}-->
+<!--        </foreach>-->
+<!--        group by summary_id-->
+<!--        order by rate desc-->
+<!--    </select>-->
+
+    <select id="getRankingByUpdate" resultType="org.jeecg.modules.sys.dto.ReportDemocracyGoodNum">
+        SELECT summary_id,
+        total,
+        good,
+        rate,
+        @rank := @rank + 1 AS ranking
+        FROM (SELECT summary_id,
+        COUNT(*)                                               AS total,
+        SUM(CASE WHEN fill = 'A' THEN 1 ELSE 0 END)            AS good,
+        SUM(CASE WHEN fill = 'A' THEN 1 ELSE 0 END) / COUNT(*) AS rate
+        FROM assess_report_evaluation_item
+        WHERE input_type = '1'
+        AND summary_id IN
+        <foreach collection="summaryIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        GROUP BY summary_id
+        ORDER BY rate DESC) AS subquery,
+        (SELECT @rank := 0) AS r
+    </select>
+</mapper>

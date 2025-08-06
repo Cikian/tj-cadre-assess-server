@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.SysCommonMapper">
+
+    <select id="getAllLeafByParentCode" resultType="org.jeecg.modules.system.entity.SysCategory">
+        select * from sys_category
+        where code like #{code}
+          and id not in (select pid from sys_category where code like #{code})
+    </select>
+    <select id="getDictItemsByCode" resultType="org.jeecg.modules.system.entity.SysDictItem">
+        select sys_dict_item.*
+        from sys_dict_item
+                 inner join sys_dict on sys_dict_item.dict_id = sys_dict.id
+        where sys_dict.dict_code = #{dictCode}
+    </select>
+    <select id="getRemainingRecommendedNum" resultType="java.lang.Integer">
+        select num
+        from assess_annual_excellent_num
+        where leader = #{leaderId}
+          and current_year = #{year}
+    </select>
+    <select id="getLeaderDeparts" resultType="java.lang.String">
+        select depart_id
+        from assess_leader_depart_config
+        where leader_id = #{leaderId}
+    </select>
+    <select id="getRecommendedCounts" resultType="java.lang.Integer">
+        select count(1)
+        from assess_annual_summary
+        where current_year = #{year}
+        and depart in
+        <foreach collection="departsList" item="depart" open="(" separator="," close=")">
+            #{depart}
+        </foreach>
+        and leader_recommend = 1
+    </select>
+    <select id="getAssessLastYear" resultType="java.lang.String">
+        select max(item_value)
+        from sys_dict_item
+        where dict_id = (select id from sys_dict where dict_code = 'assess_year');
+    </select>
+</mapper>

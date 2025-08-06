@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessDemocraticEvaluationSummaryMapper">
+
+    <select id="selectByGroup"
+            resultType="org.jeecg.modules.sys.entity.annual.AssessDemocraticEvaluationSummary">
+        SELECT assess_democratic_evaluation_summary.*
+        FROM assess_democratic_evaluation_summary
+        INNER JOIN sys_depart ON sys_depart.id = assess_democratic_evaluation_summary.depart
+        WHERE assess_democratic_evaluation_summary.current_year = #{year}
+        AND sys_depart.depart_type <![CDATA[ <> ]]> 1
+        AND assess_democratic_evaluation_summary.type <![CDATA[ <> ]]> 99
+        AND assess_democratic_evaluation_summary.score is not null
+        ORDER BY sys_depart.id, assess_democratic_evaluation_summary.score DESC
+    </select>
+</mapper>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualFillMapper">
+
+    <select id="queryRegularGradeByUserIds" resultType="org.jeecg.modules.sys.dto.RegularGradeDTO">
+        select id, name, quarter1, quarter2, quarter3, quarter4
+        from assess_regular_report_item
+        where name in
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+        and
+        current_year = #{year}
+    </select>
+
+    <select id="getAllItems" parameterType="java.lang.String"
+            resultType="org.jeecg.modules.sys.dto.AnnualFieldDTO">
+        SELECT current_year, assess_name, depart, status, deadline
+        FROM assess_annual_fill
+        WHERE current_year = #{currentYear}</select>
+</mapper>

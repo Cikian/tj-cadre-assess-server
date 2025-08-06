@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.report.AssessReportArrangeMapper">
+
+    <select id="selectEvaluationNumByDepartId" resultType="java.lang.Integer">
+        SELECT partin_num
+        FROM assess_report_arrange
+        WHERE fill_id = #{fillId}
+          AND depart = #{departId}
+    </select>
+    <select id="queryAllArrangeByYear" resultType="org.jeecg.modules.sys.dto.ArrangeDTO">
+        select arrange.depart, arrange.vote_a as vote_a, arrange.vote_b as vote_b
+        from assess_report_fill fill
+                 join assess_report_arrange arrange on fill.id = arrange.fill_id
+        where fill.current_year = #{year}
+    </select>
+</mapper>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualRecommendTempMapper">
+
+    <select id="getRecommendTempExl" resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualRecommendTemp" >
+        select leader,
+               group_rec,
+               bureau_rec,
+               basic_rec,
+               institution_rec
+        from assess_annual_recommend_temp
+    </select>
+
+</mapper>

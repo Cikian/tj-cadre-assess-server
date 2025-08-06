@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.jeecg.modules.sys.mapper.annual.AssessAnnualAccountabilityMapper">
+
+    <select id="getAssessAccountability"
+            resultType="org.jeecg.modules.sys.entity.annual.AssessAnnualAccountability">
+        select *
+        from assess_annual_accountability
+        where personnel in
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </select>
+
+    <select id="getAccountabilityInformationQuery" resultType="org.jeecg.modules.sys.dto.AssessAnnualAccountabilityDTO">
+        select personnel,
+               current_year,
+               depart,
+               type_text,
+               reference_no,
+               reason,
+               processing_depart,
+               effective_date,
+               end_date,
+               remark
+        from assess_annual_accountability
+        where current_year = #{currentYear}
+          and depart = #{depart}
+    </select>
+
+</mapper>
