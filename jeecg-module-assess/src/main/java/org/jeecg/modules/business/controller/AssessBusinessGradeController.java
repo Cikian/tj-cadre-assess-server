@@ -1072,8 +1072,10 @@ public class AssessBusinessGradeController extends JeecgController<AssessBusines
     @AutoLog(value = "重新计算排名")
     @ApiOperation(value = "重新计算排名", notes = "重新计算排名")
     //@RequiresPermissions("org.jeecg:assess_business_grade:reCalBusnessRank")
-    @GetMapping(value = "/reCalBusnessRank")
-    public Result<String> reCalBusnessRank() {
+    @GetMapping(value = "/reCalBusinessRank")
+    public Result<String> reCalBusinessRank() {
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("business");
+        if (currentAssessInfo == null || !currentAssessInfo.isAssessing()) throw new JeecgBootException("当前无正在进行中的考核");
         gradeService.updateBusinessRanking();
         gradeService.updateBusinessLevel();
         return Result.OK("操作成功");

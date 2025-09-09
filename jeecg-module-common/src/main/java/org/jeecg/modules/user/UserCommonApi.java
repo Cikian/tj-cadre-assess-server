@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.jeecg.common.system.vo.LoginUser;
 import org.jeecg.modules.sys.dto.UserToSelectDTO;
+import org.jeecg.modules.sys.entity.LeaderDepartHistory;
 import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.system.entity.SysUser;
 
@@ -16,7 +17,8 @@ public interface UserCommonApi {
                                            int pageSize,
                                            int pageNo,
                                            String id,
-                                           boolean getLeader);
+                                           boolean getLeader,
+                                           String year);
 
     /**
      * 通过用户id（数组）获取用户
@@ -116,6 +118,7 @@ public interface UserCommonApi {
      * 获取所有局领导
      */
     List<SysUser> getAllLeader();
+    List<SysUser> getHistoryAssessUnit(String year);
 
     /**
      * 删除当前登录用户，慎用！！！

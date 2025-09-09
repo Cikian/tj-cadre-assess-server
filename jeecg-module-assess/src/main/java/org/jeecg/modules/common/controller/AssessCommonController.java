@@ -47,11 +47,13 @@ import org.jeecg.modules.system.entity.SysDictItem;
 import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.system.mapper.SysDepartMapper;
 import org.jeecg.modules.system.model.SysDepartTreeModel;
+import org.jeecg.modules.system.service.ISysUserService;
 import org.jeecg.modules.user.UserCommonApi;
 import org.jeecg.modules.utils.CommonUtils;
 import org.jeecg.modules.utils.FolderToZipUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
@@ -101,20 +103,22 @@ public class AssessCommonController {
     private IAssessRegularReportItemService regularReportItemService;
     @Autowired
     private IAssessAnnualSummaryService annualSummaryService;
+    @Autowired
+    private ISysUserService sysUserService;
 
     @RequestMapping(value = "/queryUserComponentData", method = RequestMethod.GET)
     public Result<IPage<SysUser>> queryUserComponentData(@RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
                                                          @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize,
+                                                         @RequestParam(name = "year", defaultValue = "0", required = false) String year,
                                                          @RequestParam(name = "departId", required = false) String departId,
                                                          @RequestParam(name = "realname", required = false) String realname,
                                                          @RequestParam(name = "username", required = false) String username,
                                                          @RequestParam(name = "getLeader", required = false, defaultValue = "false") boolean getLeader,
                                                          @RequestParam(name = "id", required = false) String id) {
-
         String[] arr = new String[]{departId, realname, username, id};
         SqlInjectionUtil.filterContent(arr, SymbolConstant.SINGLE_QUOTATION_MARK);
 
-        IPage<SysUser> pageList = userCommonApi.queryDepartUserPageList(departId, username, realname, pageSize, pageNo, id, getLeader);
+        IPage<SysUser> pageList = userCommonApi.queryDepartUserPageList(departId, username, realname, pageSize, pageNo, id, getLeader, year);
         return Result.OK(pageList);
     }
 
@@ -468,7 +472,7 @@ public class AssessCommonController {
         List<JSONObject> list=sysBaseAPI.queryDepartsByIds(ids);
         List<String> names=new LinkedList<>();
         for (JSONObject jsonObject:
-        list) {
+                list) {
             String name=jsonObject.getString("departName");
             names.add(name);
         }
@@ -705,5 +709,45 @@ public class AssessCommonController {
         Map<String, String> map = allLeader.stream().collect(Collectors.toMap(SysUser::getId, SysUser::getRealname));
         return Result.ok(map);
     }
+
+    @GetMapping("/assess/status")
+    public Result<?> getAssessStatus(@RequestParam String oaUserId) {
+        if ("chenzijian".equals(oaUserId)) {
+            JSONObject res = new JSONObject();
+            res.put("status", true);
+            res.put("count", 2);
+            return Result.ok(res);
+        }
+
+        JSONObject res = new JSONObject();
+        SysUser sysUser = sysUserService.getOaUser(oaUserId);
+        List<AssessCurrentAssess> assessing = assessCommonApi.getAssessing();
+        if (assessing == null || assessing.isEmpty()) {
+            res.put("assessing", false);
+            return Result.ok(res);
+        }
+
+        if (sysUser == null) {
+            res.put("assessing", false);
+            return Result.ok(res);
+        }
+
+        res = regularReportItemService.getAssessingStatus(sysUser, assessing, res);
+        res = assessCommonApi.getAssessingStatus(sysUser, assessing, res);
+
+        return Result.ok(res);
+    }
+
+    @GetMapping("/checkAssessing")
+    public Result<?> checkAssessing(@RequestParam String assess) {
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo(assess);
+        if (currentAssessInfo == null) {
+            return Result.ok(false);
+        } else {
+            return Result.ok(currentAssessInfo.isAssessing());
+        }
+
+    }
+
 
 }

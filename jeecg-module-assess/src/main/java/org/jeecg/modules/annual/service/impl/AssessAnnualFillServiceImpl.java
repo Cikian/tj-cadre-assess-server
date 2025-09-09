@@ -1234,7 +1234,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
     @Override
     public void stopDem() {
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-        if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+        if (currentAssessInfo != null) {
 
             // 年度考核进度归档
             LambdaQueryWrapper<SysUser> lqw = new LambdaQueryWrapper<>();

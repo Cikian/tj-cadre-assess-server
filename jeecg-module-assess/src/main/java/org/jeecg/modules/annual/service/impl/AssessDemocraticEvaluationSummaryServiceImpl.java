@@ -39,8 +39,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @Description: 民主测评汇总
@@ -313,247 +315,343 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
     @Override
     @Synchronized
     public void updateRanking(String year) {
-        // 需更新集合
+        // 定义需要处理的类型分组
+        List<TypeGroup> typeGroups = Arrays.asList(
+                new TypeGroup("局机关正职", Arrays.asList("22", "23")),
+                new TypeGroup("局机关副职", Arrays.asList("21")),
+                new TypeGroup("基层正职", Arrays.asList("32")),
+                new TypeGroup("基层副职", Arrays.asList("31")),
+                new TypeGroup("班子", Arrays.asList("99"))
+        );
+
         List<AssessDemocraticEvaluationSummary> newList = new ArrayList<>();
 
-        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw.in(AssessDemocraticEvaluationSummary::getType, Arrays.asList("22", "23"));
-        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-        // 局机关正职，包括总师二巡
-        List<AssessDemocraticEvaluationSummary> summaries1 = democraticSummaryMapper.selectList(lqw);
-
-        // if (!summaries1.isEmpty()) {
-        //     // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-        //     summaries1.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-        //     // 更新排名
-        //     for (int i = 0; i < summaries1.size(); i++) {
-        //         AssessDemocraticEvaluationSummary summary = summaries1.get(i);
-        //         summary.setRanking(i + 1);
-        //         newList.add(summary);
-        //     }
-        // }
-
-        if (!summaries1.isEmpty()) {
-            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-            summaries1.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-
-            // 初始化排名和上一个分数
-            int rank = 1;
-            int trueRank = 0;
-            BigDecimal previousScore = new BigDecimal(0);
-
-            // 更新排名
-            for (int i = 0; i < summaries1.size(); i++) {
-                AssessDemocraticEvaluationSummary summary = summaries1.get(i);
-
-                // 如果当前分数与上一个分数相同，增加相同分数的计数
-                if (summary.getScore().compareTo(previousScore) == 0) {
-                    trueRank++;
-                } else {
-                    // 如果当前分数与上一个分数不同，更新排名
-                    trueRank++;
-                    rank = trueRank;
-                    previousScore = summary.getScore(); // 更新上一个分数
-                }
-
-                // 设置排名
-                summary.setRanking(rank);
-                newList.add(summary);
+        // 处理每种类型分组
+        for (TypeGroup group : typeGroups) {
+            List<AssessDemocraticEvaluationSummary> summaries = getSummariesByType(year, group.types);
+            if (!summaries.isEmpty()) {
+                updateRankingsForGroup(summaries);
+                newList.addAll(summaries);
             }
         }
 
-        lqw.clear();
-        // 局机关副职
-        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw.eq(AssessDemocraticEvaluationSummary::getType, "21");
-        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-        List<AssessDemocraticEvaluationSummary> summaries2 = democraticSummaryMapper.selectList(lqw);
-
-        // if (!summaries2.isEmpty()) {
-        //     summaries2.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-        //     // 更新排名
-        //     for (int i = 0; i < summaries2.size(); i++) {
-        //         AssessDemocraticEvaluationSummary summary = summaries2.get(i);
-        //         summary.setRanking(i + 1);
-        //         newList.add(summary);
-        //     }
-        // }
-
-        if (!summaries2.isEmpty()) {
-            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-            summaries2.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-
-            // 初始化排名和上一个分数
-            int rank = 1;
-            int trueRank = 0;
-            BigDecimal previousScore = new BigDecimal(0);
-
-            // 更新排名
-            for (int i = 0; i < summaries2.size(); i++) {
-                AssessDemocraticEvaluationSummary summary = summaries2.get(i);
-
-                // 如果当前分数与上一个分数相同，增加相同分数的计数
-                if (summary.getScore().compareTo(previousScore) == 0) {
-                    trueRank++;
-                } else {
-                    // 如果当前分数与上一个分数不同，更新排名
-                    trueRank++;
-                    rank = trueRank;
-                    previousScore = summary.getScore(); // 更新上一个分数
-                }
-
-                // 设置排名
-                summary.setRanking(rank);
-                newList.add(summary);
-            }
-        }
-
-        lqw.clear();
-        // 基层正职
-        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw.eq(AssessDemocraticEvaluationSummary::getType, "32");
-        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-        List<AssessDemocraticEvaluationSummary> summaries3 = democraticSummaryMapper.selectList(lqw);
-
-        // if (!summaries3.isEmpty()) {
-        //     summaries3.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-        //     // 更新排名
-        //     for (int i = 0; i < summaries3.size(); i++) {
-        //         AssessDemocraticEvaluationSummary summary = summaries3.get(i);
-        //         summary.setRanking(i + 1);
-        //         newList.add(summary);
-        //     }
-        // }
-
-        if (!summaries3.isEmpty()) {
-            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-            summaries3.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-
-            // 初始化排名和上一个分数
-            int rank = 1;
-            int trueRank = 0;
-            BigDecimal previousScore = new BigDecimal(0);
-
-            // 更新排名
-            for (int i = 0; i < summaries3.size(); i++) {
-                AssessDemocraticEvaluationSummary summary = summaries3.get(i);
-
-                // 如果当前分数与上一个分数相同，增加相同分数的计数
-                if (summary.getScore().compareTo(previousScore) == 0) {
-                    trueRank++;
-                } else {
-                    // 如果当前分数与上一个分数不同，更新排名
-                    trueRank++;
-                    rank = trueRank;
-                    previousScore = summary.getScore(); // 更新上一个分数
-                }
-
-                // 设置排名
-                summary.setRanking(rank);
-                newList.add(summary);
-            }
-        }
-
-        lqw.clear();
-        // 基层副职
-        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw.eq(AssessDemocraticEvaluationSummary::getType, "31");
-        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-        List<AssessDemocraticEvaluationSummary> summaries4 = democraticSummaryMapper.selectList(lqw);
-        summaries4.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-        // if (!summaries4.isEmpty()) {
-        //     // 更新排名
-        //     for (int i = 0; i < summaries4.size(); i++) {
-        //         AssessDemocraticEvaluationSummary summary = summaries4.get(i);
-        //         summary.setRanking(i + 1);
-        //         newList.add(summary);
-        //     }
-        // }
-
-        if (!summaries4.isEmpty()) {
-            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-            summaries4.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-
-            // 初始化排名和上一个分数
-            int rank = 1;
-            int trueRank = 0;
-            BigDecimal previousScore = new BigDecimal(0);
-
-            // 更新排名
-            for (int i = 0; i < summaries4.size(); i++) {
-                AssessDemocraticEvaluationSummary summary = summaries4.get(i);
-
-                // 如果当前分数与上一个分数相同，增加相同分数的计数
-                if (summary.getScore().compareTo(previousScore) == 0) {
-                    trueRank++;
-                } else {
-                    // 如果当前分数与上一个分数不同，更新排名
-                    trueRank++;
-                    rank = trueRank;
-                    previousScore = summary.getScore(); // 更新上一个分数
-                }
-
-                // 设置排名
-                summary.setRanking(rank);
-                newList.add(summary);
-            }
-        }
-
-        lqw.clear();
-        // 班子
-        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw.eq(AssessDemocraticEvaluationSummary::getType, "99");
-        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-        List<AssessDemocraticEvaluationSummary> groupSummaries = democraticSummaryMapper.selectList(lqw);
-        // if (!groupSummaries.isEmpty()) {
-        //     groupSummaries.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-        //
-        //     for (int i = 0; i < groupSummaries.size(); i++) {
-        //         AssessDemocraticEvaluationSummary summary = groupSummaries.get(i);
-        //         summary.setRanking(i + 1);
-        //         newList.add(summary);
-        //     }
-        // }
-
-        if (!groupSummaries.isEmpty()) {
-            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
-            groupSummaries.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-
-            // 初始化排名和上一个分数
-            int rank = 1;
-            int trueRank = 0;
-            BigDecimal previousScore = new BigDecimal(0);
-
-            // 更新排名
-            for (int i = 0; i < groupSummaries.size(); i++) {
-                AssessDemocraticEvaluationSummary summary = groupSummaries.get(i);
-
-                // 如果当前分数与上一个分数相同，增加相同分数的计数
-                if (summary.getScore().compareTo(previousScore) == 0) {
-                    trueRank++;
-                } else {
-                    // 如果当前分数与上一个分数不同，更新排名
-                    trueRank++;
-                    rank = trueRank;
-                    previousScore = summary.getScore(); // 更新上一个分数
-                }
-
-                // 设置排名
-                summary.setRanking(rank);
-                newList.add(summary);
-            }
-        }
-
-        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false);
-        AssessDemocraticEvaluationSummaryMapper summaryMapperNew = sqlSession.getMapper(AssessDemocraticEvaluationSummaryMapper.class);
-
-        newList.forEach(summaryMapperNew::updateById);
-
-        sqlSession.commit();
-        sqlSession.clearCache();
-        sqlSession.close();
+        // 批量更新数据库
+        batchUpdateSummaries(newList);
     }
+
+    // 辅助类：封装类型分组信息
+    private static class TypeGroup {
+        final String name;
+        final List<String> types;
+
+        TypeGroup(String name, List<String> types) {
+            this.name = name;
+            this.types = types;
+        }
+    }
+
+    // 辅助方法1：根据类型查询数据
+    private List<AssessDemocraticEvaluationSummary> getSummariesByType(String year, List<String> types) {
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year)
+                .in(AssessDemocraticEvaluationSummary::getType, types)
+                .isNotNull(AssessDemocraticEvaluationSummary::getScore);
+
+        return democraticSummaryMapper.selectList(lqw);
+    }
+
+    // 辅助方法2：更新分组内的排名
+    private void updateRankingsForGroup(List<AssessDemocraticEvaluationSummary> summaries) {
+        // 按分数降序排序
+        summaries.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+
+        // 初始化排名和分数跟踪
+        int rank = 1;
+        int trueRank = 0;
+        BigDecimal previousScore = null;
+
+        // 更新排名
+        for (AssessDemocraticEvaluationSummary summary : summaries) {
+            BigDecimal currentScore = summary.getScore();
+
+            // 处理第一个元素
+            if (previousScore == null) {
+                previousScore = currentScore;
+                trueRank = 1;
+            }
+            // 分数相同则保持相同排名
+            else if (currentScore.compareTo(previousScore) == 0) {
+                trueRank++;
+            }
+            // 分数不同则更新排名
+            else {
+                trueRank++;
+                rank = trueRank;
+                previousScore = currentScore;
+            }
+
+            // 设置排名
+            summary.setRanking(rank);
+        }
+    }
+
+    // 辅助方法3：批量更新数据库
+    private void batchUpdateSummaries(List<AssessDemocraticEvaluationSummary> summaries) {
+        if (summaries.isEmpty()) return;
+
+        try (SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false)) {
+            AssessDemocraticEvaluationSummaryMapper summaryMapper = sqlSession.getMapper(AssessDemocraticEvaluationSummaryMapper.class);
+
+            for (AssessDemocraticEvaluationSummary summary : summaries) {
+                summaryMapper.updateById(summary);
+            }
+
+            sqlSession.commit();
+        }
+    }
+
+//    public void updateRanking(String year) {
+//        // 需更新集合
+//        List<AssessDemocraticEvaluationSummary> newList = new ArrayList<>();
+//
+//        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+//        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+//        lqw.in(AssessDemocraticEvaluationSummary::getType, Arrays.asList("22", "23"));
+//        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//        // 局机关正职，包括总师二巡
+//        List<AssessDemocraticEvaluationSummary> summaries1 = democraticSummaryMapper.selectList(lqw);
+//
+//        // if (!summaries1.isEmpty()) {
+//        //     // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//        //     summaries1.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//        //     // 更新排名
+//        //     for (int i = 0; i < summaries1.size(); i++) {
+//        //         AssessDemocraticEvaluationSummary summary = summaries1.get(i);
+//        //         summary.setRanking(i + 1);
+//        //         newList.add(summary);
+//        //     }
+//        // }
+//
+//        if (!summaries1.isEmpty()) {
+//            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//            summaries1.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//
+//            // 初始化排名和上一个分数
+//            int rank = 1;
+//            int trueRank = 0;
+//            BigDecimal previousScore = new BigDecimal(0);
+//
+//            // 更新排名
+//            for (int i = 0; i < summaries1.size(); i++) {
+//                AssessDemocraticEvaluationSummary summary = summaries1.get(i);
+//
+//                // 如果当前分数与上一个分数相同，增加相同分数的计数
+//                if (summary.getScore().compareTo(previousScore) == 0) {
+//                    trueRank++;
+//                } else {
+//                    // 如果当前分数与上一个分数不同，更新排名
+//                    trueRank++;
+//                    rank = trueRank;
+//                    previousScore = summary.getScore(); // 更新上一个分数
+//                }
+//
+//                // 设置排名
+//                summary.setRanking(rank);
+//                newList.add(summary);
+//            }
+//        }
+//
+//        lqw.clear();
+//        // 局机关副职
+//        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+//        lqw.eq(AssessDemocraticEvaluationSummary::getType, "21");
+//        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//        List<AssessDemocraticEvaluationSummary> summaries2 = democraticSummaryMapper.selectList(lqw);
+//
+//        // if (!summaries2.isEmpty()) {
+//        //     summaries2.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//        //     // 更新排名
+//        //     for (int i = 0; i < summaries2.size(); i++) {
+//        //         AssessDemocraticEvaluationSummary summary = summaries2.get(i);
+//        //         summary.setRanking(i + 1);
+//        //         newList.add(summary);
+//        //     }
+//        // }
+//
+//        if (!summaries2.isEmpty()) {
+//            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//            summaries2.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//
+//            // 初始化排名和上一个分数
+//            int rank = 1;
+//            int trueRank = 0;
+//            BigDecimal previousScore = new BigDecimal(0);
+//
+//            // 更新排名
+//            for (int i = 0; i < summaries2.size(); i++) {
+//                AssessDemocraticEvaluationSummary summary = summaries2.get(i);
+//
+//                // 如果当前分数与上一个分数相同，增加相同分数的计数
+//                if (summary.getScore().compareTo(previousScore) == 0) {
+//                    trueRank++;
+//                } else {
+//                    // 如果当前分数与上一个分数不同，更新排名
+//                    trueRank++;
+//                    rank = trueRank;
+//                    previousScore = summary.getScore(); // 更新上一个分数
+//                }
+//
+//                // 设置排名
+//                summary.setRanking(rank);
+//                newList.add(summary);
+//            }
+//        }
+//
+//        lqw.clear();
+//        // 基层正职
+//        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+//        lqw.eq(AssessDemocraticEvaluationSummary::getType, "32");
+//        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//        List<AssessDemocraticEvaluationSummary> summaries3 = democraticSummaryMapper.selectList(lqw);
+//
+//        // if (!summaries3.isEmpty()) {
+//        //     summaries3.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//        //     // 更新排名
+//        //     for (int i = 0; i < summaries3.size(); i++) {
+//        //         AssessDemocraticEvaluationSummary summary = summaries3.get(i);
+//        //         summary.setRanking(i + 1);
+//        //         newList.add(summary);
+//        //     }
+//        // }
+//
+//        if (!summaries3.isEmpty()) {
+//            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//            summaries3.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//
+//            // 初始化排名和上一个分数
+//            int rank = 1;
+//            int trueRank = 0;
+//            BigDecimal previousScore = new BigDecimal(0);
+//
+//            // 更新排名
+//            for (int i = 0; i < summaries3.size(); i++) {
+//                AssessDemocraticEvaluationSummary summary = summaries3.get(i);
+//
+//                // 如果当前分数与上一个分数相同，增加相同分数的计数
+//                if (summary.getScore().compareTo(previousScore) == 0) {
+//                    trueRank++;
+//                } else {
+//                    // 如果当前分数与上一个分数不同，更新排名
+//                    trueRank++;
+//                    rank = trueRank;
+//                    previousScore = summary.getScore(); // 更新上一个分数
+//                }
+//
+//                // 设置排名
+//                summary.setRanking(rank);
+//                newList.add(summary);
+//            }
+//        }
+//
+//        lqw.clear();
+//        // 基层副职
+//        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+//        lqw.eq(AssessDemocraticEvaluationSummary::getType, "31");
+//        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//        List<AssessDemocraticEvaluationSummary> summaries4 = democraticSummaryMapper.selectList(lqw);
+//        summaries4.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//        // if (!summaries4.isEmpty()) {
+//        //     // 更新排名
+//        //     for (int i = 0; i < summaries4.size(); i++) {
+//        //         AssessDemocraticEvaluationSummary summary = summaries4.get(i);
+//        //         summary.setRanking(i + 1);
+//        //         newList.add(summary);
+//        //     }
+//        // }
+//
+//        if (!summaries4.isEmpty()) {
+//            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//            summaries4.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//
+//            // 初始化排名和上一个分数
+//            int rank = 1;
+//            int trueRank = 0;
+//            BigDecimal previousScore = new BigDecimal(0);
+//
+//            // 更新排名
+//            for (int i = 0; i < summaries4.size(); i++) {
+//                AssessDemocraticEvaluationSummary summary = summaries4.get(i);
+//
+//                // 如果当前分数与上一个分数相同，增加相同分数的计数
+//                if (summary.getScore().compareTo(previousScore) == 0) {
+//                    trueRank++;
+//                } else {
+//                    // 如果当前分数与上一个分数不同，更新排名
+//                    trueRank++;
+//                    rank = trueRank;
+//                    previousScore = summary.getScore(); // 更新上一个分数
+//                }
+//
+//                // 设置排名
+//                summary.setRanking(rank);
+//                newList.add(summary);
+//            }
+//        }
+//
+//        lqw.clear();
+//        // 班子
+//        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+//        lqw.eq(AssessDemocraticEvaluationSummary::getType, "99");
+//        lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//        List<AssessDemocraticEvaluationSummary> groupSummaries = democraticSummaryMapper.selectList(lqw);
+//        // if (!groupSummaries.isEmpty()) {
+//        //     groupSummaries.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//        //
+//        //     for (int i = 0; i < groupSummaries.size(); i++) {
+//        //         AssessDemocraticEvaluationSummary summary = groupSummaries.get(i);
+//        //         summary.setRanking(i + 1);
+//        //         newList.add(summary);
+//        //     }
+//        // }
+//
+//        if (!groupSummaries.isEmpty()) {
+//            // 根据AssessDemocraticEvaluationSummary的score字段降序排序
+//            groupSummaries.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+//
+//            // 初始化排名和上一个分数
+//            int rank = 1;
+//            int trueRank = 0;
+//            BigDecimal previousScore = new BigDecimal(0);
+//
+//            // 更新排名
+//            for (int i = 0; i < groupSummaries.size(); i++) {
+//                AssessDemocraticEvaluationSummary summary = groupSummaries.get(i);
+//
+//                // 如果当前分数与上一个分数相同，增加相同分数的计数
+//                if (summary.getScore().compareTo(previousScore) == 0) {
+//                    trueRank++;
+//                } else {
+//                    // 如果当前分数与上一个分数不同，更新排名
+//                    trueRank++;
+//                    rank = trueRank;
+//                    previousScore = summary.getScore(); // 更新上一个分数
+//                }
+//
+//                // 设置排名
+//                summary.setRanking(rank);
+//                newList.add(summary);
+//            }
+//        }
+//
+//        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false);
+//        AssessDemocraticEvaluationSummaryMapper summaryMapperNew = sqlSession.getMapper(AssessDemocraticEvaluationSummaryMapper.class);
+//
+//        newList.forEach(summaryMapperNew::updateById);
+//
+//        sqlSession.commit();
+//        sqlSession.clearCache();
+//        sqlSession.close();
+//    }
 
     @Override
     @Synchronized
@@ -582,13 +680,13 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             List<String> leaderConfigList = new ArrayList<>();
 
             for (AssessLeaderConfig cl : leaderConfigs) {
-                if(cl.getLeader().equals(config.getLeaderId())) {
+                if (cl.getLeader().equals(config.getLeaderId())) {
                     leaderConfigList.add(cl.getHashId());
                 }
             }
 
             List<AssessDemocraticEvaluationSummary> leaderConfigSummaries = new ArrayList<>();
-            if (!leaderConfigList.isEmpty()){
+            if (!leaderConfigList.isEmpty()) {
                 lqw.clear();
                 lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
                 lqw.in(AssessDemocraticEvaluationSummary::getAppraisee, leaderConfigList);
@@ -608,7 +706,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             lqw.eq(AssessDemocraticEvaluationSummary::getType, "22");
             lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
             List<AssessDemocraticEvaluationSummary> summaries1 = democraticSummaryMapper.selectList(lqw);
-            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries){
+            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries) {
                 if (s.getType().equals("22")) {
                     summaries1.add(s);
                 }
@@ -676,7 +774,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
             List<AssessDemocraticEvaluationSummary> summaries2 = democraticSummaryMapper.selectList(lqw);
 
-            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries){
+            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries) {
                 if (s.getType().equals("21")) {
                     summaries2.add(s);
                 }
@@ -732,7 +830,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
             List<AssessDemocraticEvaluationSummary> summaries3 = democraticSummaryMapper.selectList(lqw);
 
-            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries){
+            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries) {
                 if (s.getType().equals("32")) {
                     summaries3.add(s);
                 }
@@ -789,7 +887,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
             List<AssessDemocraticEvaluationSummary> summaries4 = democraticSummaryMapper.selectList(lqw);
 
-            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries){
+            for (AssessDemocraticEvaluationSummary s : leaderConfigSummaries) {
                 if (s.getType().equals("31")) {
                     summaries4.add(s);
                 }
@@ -1636,144 +1734,234 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
 
     @Override
     public List<Dem4jjGradeDTO> getSummaryItems4jjExcel(String year) {
+        // 1. 查询年度总结数据
+        List<String> hashIds = getAnnualSummaryHashIds(year);
+
+        // 2. 查询民主评价数据
+        List<AssessDemocraticEvaluationSummary> demList = getDemocraticSummaries(year, hashIds);
+        List<AssessDemocraticEvaluationSummary> allDem = getAllDemocraticSummaries(year);
+
+        // 3. 处理部门名称格式
+        processDepartmentNames(demList);
+        processDepartmentNames(allDem);
+
+        // 4. 获取部门映射
+        Map<String, String> departMap = getDepartmentMap();
+
+        // 5. 构建结果DTO列表
+        return buildResultDTOs(demList, allDem, departMap);
+    }
+
+    // 辅助方法1：获取年度总结的hashIds
+    private List<String> getAnnualSummaryHashIds(String year) {
         LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(AssessAnnualSummary::getInspectionWork, true);
-        lqw.eq(AssessAnnualSummary::getCurrentYear, year);
+        lqw.eq(AssessAnnualSummary::getInspectionWork, true)
+                .eq(AssessAnnualSummary::getCurrentYear, year);
 
-        List<AssessAnnualSummary> annualSummaries = annualSummaryMapper.selectList(lqw);
+        return annualSummaryMapper.selectList(lqw).stream()
+                .map(AssessAnnualSummary::getHashId)
+                .collect(Collectors.toList());
+    }
 
-        // 取出hashId组成List
-        List<String> hashIds = annualSummaries.stream().map(AssessAnnualSummary::getHashId).collect(Collectors.toList());
+    // 辅助方法2：获取民主评价列表
+    private List<AssessDemocraticEvaluationSummary> getDemocraticSummaries(String year, List<String> hashIds) {
+        if (hashIds.isEmpty()) return Collections.emptyList();
 
-        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw2 = new LambdaQueryWrapper<>();
-        lqw2.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw2.in(AssessDemocraticEvaluationSummary::getAppraisee, hashIds);
-        lqw2.orderByDesc(AssessDemocraticEvaluationSummary::getScore);
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year)
+                .in(AssessDemocraticEvaluationSummary::getAppraisee, hashIds)
+                .orderByDesc(AssessDemocraticEvaluationSummary::getScore);
 
-        List<AssessDemocraticEvaluationSummary> demList = democraticSummaryMapper.selectList(lqw2);
+        return democraticSummaryMapper.selectList(lqw);
+    }
 
-        for (AssessDemocraticEvaluationSummary dem : demList) {
+    // 辅助方法3：获取所有民主评价列表
+    private List<AssessDemocraticEvaluationSummary> getAllDemocraticSummaries(String year) {
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year)
+                .ne(AssessDemocraticEvaluationSummary::getType, "99")
+                .orderByDesc(AssessDemocraticEvaluationSummary::getScore);
+
+        return democraticSummaryMapper.selectList(lqw);
+    }
+
+    // 辅助方法4：处理部门名称格式
+    private void processDepartmentNames(List<AssessDemocraticEvaluationSummary> summaries) {
+        summaries.forEach(dem -> {
             if (dem.getDepart().startsWith("JG")) {
-                // 删除开头的JG
-                String dep = dem.getDepart().substring(2);
-                dem.setDepart(dep);
+                dem.setDepart(dem.getDepart().substring(2));
             }
+        });
+    }
+
+    // 辅助方法5：获取部门映射
+    private Map<String, String> getDepartmentMap() {
+        return departCommonApi.queryAllDepart().stream()
+                .sorted(Comparator.comparing(SysDepartModel::getDepartOrder))
+                .collect(Collectors.toMap(
+                        SysDepartModel::getId,
+                        SysDepartModel::getDepartName,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+    }
+
+    // 辅助方法6：构建结果DTO
+    private List<Dem4jjGradeDTO> buildResultDTOs(
+            List<AssessDemocraticEvaluationSummary> demList,
+            List<AssessDemocraticEvaluationSummary> allDem,
+            Map<String, String> departMap) {
+
+        if (demList.isEmpty() || allDem.isEmpty() || departMap.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        lqw2.clear();
-        lqw2.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-        lqw2.ne(AssessDemocraticEvaluationSummary::getType, "99");
-        lqw2.orderByDesc(AssessDemocraticEvaluationSummary::getScore);
+        // 预计算分组数据
+        Map<String, List<AssessDemocraticEvaluationSummary>> allDemByDepart = allDem.stream()
+                .collect(Collectors.groupingBy(AssessDemocraticEvaluationSummary::getDepart));
 
-        List<AssessDemocraticEvaluationSummary> allDem = democraticSummaryMapper.selectList(lqw2);
-        for (AssessDemocraticEvaluationSummary dem : allDem) {
-            if (dem.getDepart().startsWith("JG")) {
-                // 删除开头的JG
-                String dep = dem.getDepart().substring(2);
-                dem.setDepart(dep);
-            }
+        Map<String, List<AssessDemocraticEvaluationSummary>> allDemByType = allDem.stream()
+                .collect(Collectors.groupingBy(AssessDemocraticEvaluationSummary::getType));
+
+        // 预加载领导配置
+        Set<String> leaderDepartIds = demList.stream()
+                .filter(dem -> dem.getType().startsWith("2"))
+                .map(AssessDemocraticEvaluationSummary::getDepart)
+                .collect(Collectors.toSet());
+
+        Map<String, List<String>> leaderConfigMap = getLeaderConfigMap(leaderDepartIds);
+
+        List<Dem4jjGradeDTO> result = new ArrayList<>();
+        // 使用原子整数解决lambda中的final限制
+        AtomicInteger sequence = new AtomicInteger(1);
+
+        for (Map.Entry<String, String> entry : departMap.entrySet()) {
+            // 创建final变量供lambda使用
+            final String currentDepartId = entry.getKey();
+            final String currentDepartName = entry.getValue();
+
+            demList.stream()
+                    .filter(dem -> currentDepartId.equals(dem.getDepart()))
+                    .findFirst()
+                    .ifPresent(dem -> {
+                        // 创建DTO对象
+                        Dem4jjGradeDTO dto = new Dem4jjGradeDTO();
+                        dto.setNo(sequence.getAndIncrement());
+                        dto.setDepart(currentDepartName);
+                        dto.setName(CommonUtils.getNameByHashId(dem.getAppraisee()));
+                        dto.setGrade(dem.getScore());
+
+                        // 处理排名逻辑
+                        processRanking(dem, allDemByDepart, allDemByType, leaderConfigMap, dto);
+
+                        // 设置最终排名
+                        dto.setRanking(dem.getType().endsWith("1") ? dem.getScopeRanking() : null);
+
+                        result.add(dto);
+                    });
         }
 
+        return result;
+    }
 
-        List<SysDepartModel> sysDepartModels = departCommonApi.queryAllDepart();
-        // 通过departOrder升序排序
-        sysDepartModels.sort(Comparator.comparing(SysDepartModel::getDepartOrder));
+    // 辅助方法7：获取领导配置映射
+    private Map<String, List<String>> getLeaderConfigMap(Set<String> departIds) {
+        if (departIds.isEmpty()) return Collections.emptyMap();
 
-        // ID作为k，departName作为V
-        Map<String, String> departMap = sysDepartModels.stream().collect(Collectors.toMap(SysDepartModel::getId, SysDepartModel::getDepartName));
+        LambdaQueryWrapper<AssessLeaderDepartConfig> lqw = new LambdaQueryWrapper<>();
+        lqw.in(AssessLeaderDepartConfig::getDepartId, departIds);
 
-        List<Dem4jjGradeDTO> res = new ArrayList<>();
+        return leaderDepartConfigMapper.selectList(lqw).stream()
+                .collect(Collectors.toMap(
+                        AssessLeaderDepartConfig::getDepartId,
+                        config -> Arrays.asList(config.getDepartId().split(",")),
+                        (a, b) -> a,
+                        HashMap::new
+                ));
+    }
 
-        int no = 1;
+    // 辅助方法8：处理排名逻辑
+    private void processRanking(AssessDemocraticEvaluationSummary dem,
+                                Map<String, List<AssessDemocraticEvaluationSummary>> allDemByDepart,
+                                Map<String, List<AssessDemocraticEvaluationSummary>> allDemByType,
+                                Map<String, List<String>> leaderConfigMap,
+                                Dem4jjGradeDTO dto) {
 
-        if (!demList.isEmpty() && !allDem.isEmpty() && !sysDepartModels.isEmpty()) {
-            for (SysDepartModel dep : sysDepartModels) {
-                AssessDemocraticEvaluationSummary dem = demList.stream().filter(a -> a.getDepart().equals(dep.getId())).findFirst().orElse(null);
-                if (dem == null) continue;
-                Dem4jjGradeDTO dto = new Dem4jjGradeDTO();
-                dto.setNo(no);
-                dto.setDepart(departMap.get(dem.getDepart()));
-                dto.setName(CommonUtils.getNameByHashId(dem.getAppraisee()));
-                dto.setGrade(dem.getScore());
+        String type = dem.getType();
 
-                if (dem.getType().startsWith("3")) {
-                    // 从allDem中找到所有相同单位的人员
-                    List<AssessDemocraticEvaluationSummary> sameDepart = allDem.stream().filter(a -> a.getDepart().equals(dem.getDepart())).collect(Collectors.toList());
-                    // 按score降序排序
-                    sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-                    // 找到当前人员的排名
-                    int rank = sameDepart.indexOf(dem) + 1;
-                    if (dem.getScore().compareTo(new BigDecimal(100)) == 0) {
-                        rank = 1;
-                    }
-                    if (!sameDepart.isEmpty()) {
-                        dto.setScopeRanking1(rank);
-                        dto.setScopeRanking2(sameDepart.size());
-                        dto.setScopeRanking(rank + " / " + sameDepart.size());
-                    }
-                } else if (dem.getType().startsWith("2")) {
-                    if (dem.getType().equals("22") || dem.getType().equals("23") || dem.getType().equals("21")) {
+        if (type.startsWith("3")) {
+            processType3Ranking(dem, allDemByDepart, dto);
+        } else if (type.startsWith("2")) {
+            processType2Ranking(dem, allDemByType, leaderConfigMap, dto);
+        }
+    }
 
-                        // List<AssessDemocraticEvaluationSummary> sameDepart;
-                        // if (dem.getType().equals("21")) {
-                        //     sameDepart = allDem.stream().filter(a -> a.getType().equals("21")).collect(Collectors.toList());
-                        // } else {
-                        //     sameDepart = allDem.stream().filter(a -> a.getType().equals("22") || a.getType().equals("23")).collect(Collectors.toList());
-                        // }
-                        // // 按score降序排序
-                        // sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-                        // // 找到当前人员的排名
-                        // int rank = sameDepart.indexOf(dem) + 1;
-                        // if (dem.getScore().compareTo(new BigDecimal(100)) == 0) {
-                        //     rank = 1;
-                        // }
+    // 辅助方法9：处理类型3的排名
+    private void processType3Ranking(AssessDemocraticEvaluationSummary dem,
+                                     Map<String, List<AssessDemocraticEvaluationSummary>> allDemByDepart,
+                                     Dem4jjGradeDTO dto) {
 
-                        String depart = dem.getDepart();
-                        LambdaQueryWrapper<AssessLeaderDepartConfig> lqw3 = new LambdaQueryWrapper<>();
-                        lqw3.like(AssessLeaderDepartConfig::getDepartId, depart);
-                        List<AssessLeaderDepartConfig> ldConfig = leaderDepartConfigMapper.selectList(lqw3);
+        List<AssessDemocraticEvaluationSummary> sameDepart = allDemByDepart.getOrDefault(
+                dem.getDepart(), Collections.emptyList());
 
-                        List<AssessDemocraticEvaluationSummary> sameDepart = new ArrayList<>();
-                        if (ldConfig != null && !ldConfig.isEmpty()) {
-                            if (dem.getType().equals("21")) {
-                                sameDepart = allDem.stream().filter(a -> a.getType().equals("21")).collect(Collectors.toList());
-                            } else {
-                                sameDepart = allDem.stream().filter(a -> a.getType().equals("22") || a.getType().equals("23")).collect(Collectors.toList());
-                            }
+        if (!sameDepart.isEmpty()) {
+            sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+            int rank = sameDepart.indexOf(dem) + 1;
 
-                            String departIds = ldConfig.get(0).getDepartId();
-                            List<String> departIdList = Arrays.asList(departIds.split(","));
-                            // 从sameDepart中找到所有departIdList中的部门
-                            sameDepart = sameDepart.stream().filter(a -> departIdList.contains(a.getDepart())).collect(Collectors.toList());
-                        }
-                        // 按score降序排序
-                        sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
-                        // 找到当前人员的排名
-                        // int rank = sameDepart.indexOf(dem) + 1;
-                        // if (dem.getScore().compareTo(new BigDecimal(100)) == 0) {
-                        //     rank = 1;
-                        // }
+            // 满分处理
+            if (dem.getScore().compareTo(BigDecimal.valueOf(100)) == 0) {
+                rank = 1;
+            }
 
+            dto.setScopeRanking1(rank);
+            dto.setScopeRanking2(sameDepart.size());
+            dto.setScopeRanking(rank + " / " + sameDepart.size());
+        }
+    }
 
-                        if (!sameDepart.isEmpty()) {
-                            dto.setScopeRanking1(dem.getScopeRanking());
-                            dto.setScopeRanking2(sameDepart.size());
-                            if (dem.getType().equals("21"))
-                                dto.setScopeRanking(dem.getScopeRanking() + " / " + sameDepart.size() + "（局机关考核单元内副处职排名）");
-                            else
-                                dto.setScopeRanking(dem.getScopeRanking() + " / " + sameDepart.size() + "（局机关核单元内正处职排名）");
-                        }
-                    }
+    // 辅助方法10：处理类型2的排名
+    private void processType2Ranking(AssessDemocraticEvaluationSummary dem,
+                                     Map<String, List<AssessDemocraticEvaluationSummary>> allDemByType,
+                                     Map<String, List<String>> leaderConfigMap,
+                                     Dem4jjGradeDTO dto) {
+
+        if ("21".equals(dem.getType()) || "22".equals(dem.getType()) || "23".equals(dem.getType())) {
+            List<AssessDemocraticEvaluationSummary> sameType = getSameTypeList(dem, allDemByType);
+            List<String> configDepartIds = leaderConfigMap.get(dem.getDepart());
+
+            if (configDepartIds != null && !configDepartIds.isEmpty()) {
+                sameType = sameType.stream()
+                        .filter(item -> configDepartIds.contains(item.getDepart()))
+                        .collect(Collectors.toList());
+            }
+
+            if (!sameType.isEmpty()) {
+                sameType.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+
+                dto.setScopeRanking1(dem.getScopeRanking());
+                dto.setScopeRanking2(sameType.size());
+
+                String rankingText = dem.getScopeRanking() + " / " + sameType.size();
+                if ("21".equals(dem.getType())) {
+                    dto.setScopeRanking(rankingText + "（局机关考核单元内副处职排名）");
+                } else {
+                    dto.setScopeRanking(rankingText + "（局机关考核单元内正处职排名）");
                 }
-
-                if (!dem.getType().endsWith("1")) dto.setRanking(null);
-                else dto.setRanking(dem.getScopeRanking());
-                res.add(dto);
-                no++;
             }
-            return res;
         }
-        return null;
+    }
+
+    // 辅助方法11：获取相同类型列表
+    private List<AssessDemocraticEvaluationSummary> getSameTypeList(
+            AssessDemocraticEvaluationSummary dem,
+            Map<String, List<AssessDemocraticEvaluationSummary>> allDemByType) {
+
+        return "21".equals(dem.getType()) ?
+                allDemByType.getOrDefault("21", Collections.emptyList()) :
+                Stream.concat(
+                        allDemByType.getOrDefault("22", Collections.emptyList()).stream(),
+                        allDemByType.getOrDefault("23", Collections.emptyList()).stream()
+                ).collect(Collectors.toList());
     }
 
     private List<AssessDemocraticEvaluation> getDecBySummaryIds(List<String> summaryId) {
@@ -1900,6 +2088,8 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             } else {
                 throw new JeecgBootException("当前无正在进行中的考核");
             }
+        } else {
+            throw new JeecgBootException("当前无正在进行中的考核");
         }
     }
 

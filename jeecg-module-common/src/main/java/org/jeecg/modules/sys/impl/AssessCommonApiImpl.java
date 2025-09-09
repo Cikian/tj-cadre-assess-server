@@ -33,6 +33,7 @@ import org.jeecg.modules.sys.mapper.business.AssessBusinessDenounceMapper;
 import org.jeecg.modules.sys.mapper.business.AssessBusinessDepartFillMapper;
 import org.jeecg.modules.sys.mapper.business.AssessLeaderDepartConfigMapper;
 import org.jeecg.modules.sys.mapper.report.AssessReportFillMapper;
+import org.jeecg.modules.sys.vo.DemocraticFillListVO;
 import org.jeecg.modules.system.entity.SysCategory;
 import org.jeecg.modules.system.entity.SysDepart;
 import org.jeecg.modules.system.entity.SysDictItem;
@@ -43,6 +44,7 @@ import org.jeecgframework.poi.excel.ExcelImportUtil;
 import org.jeecgframework.poi.excel.entity.ImportParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -877,6 +879,320 @@ public class AssessCommonApiImpl implements AssessCommonApi {
             return dictItems.stream().collect(Collectors.toMap(DictModel::getValue, DictModel::getText));
         }
         return Collections.emptyMap();
+    }
+
+    @Override
+    public List<AssessCurrentAssess> getAssessing() {
+        LambdaQueryWrapper<AssessCurrentAssess> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessCurrentAssess::isAssessing, true);
+        return currentAssessMapper.selectList(lqw);
+    }
+
+
+    @Override
+    public JSONObject getAssessingStatus(SysUser user, List<AssessCurrentAssess> assessingList, JSONObject res) {
+        int count = res.get("count") == null ? 0 : (int) res.get("count");
+        boolean assessing = res.getBoolean("status");
+        String userId = user.getId();
+
+        // 获取领导分管处室配置
+        AssessLeaderDepartConfig config = getAssessUnitByLeader(userId);
+        if (config != null) {
+            List<String> departIds = Arrays.asList(config.getDepartId().split(","));
+
+            for (AssessCurrentAssess assess : assessingList) {
+                if ("annual".equals(assess.getAssess())) {
+                    // 判断是否需要进行民主测评
+                    List<DemocraticFillListVO> anonymousList = this.getAnonymousList(user);
+                    if (anonymousList != null && !anonymousList.isEmpty()) {
+                        assessing = true;
+                        count++;
+                    }
+
+                    // 判断是否需要进行推优
+                    List<AssessLeaderRecItem> leaderRecommendList = this.getLeaderRecommendList(user.getId(), assess.getCurrentYear());
+                    if (leaderRecommendList != null && !leaderRecommendList.isEmpty()) {
+                        assessing = true;
+                        count++;
+                    }
+                }
+            }
+        }
+
+        res.put("status", assessing);
+        res.put("count", count);
+
+        return res;
+    }
+
+    @Autowired
+    @Lazy
+    private UserCommonApi userCommonApi;
+    @Autowired
+    private AssessDemocraticEvaluationSummaryMapper summaryMapper;
+    @Autowired
+    private AssessDemocraticEvaluationMapper democraticEvaluationMapper;
+    @Autowired
+    private AssessAnnualSummaryMapper annualSummaryMapper;
+
+    private List<DemocraticFillListVO> getAnonymousList(SysUser sysUser) {
+        // 获取当前登录用户的部门id
+        List<String> roles = userCommonApi.getUserRolesByUserName(sysUser.getUsername());
+
+        String departIds = sysUser.getDepartIds();
+        if (departIds == null) {
+            return Collections.emptyList();
+        }
+        List<String> departIdList = Arrays.asList(departIds.split(","));
+
+        AssessCurrentAssess annual = this.getCurrentAssessInfo("annual");
+        if (annual == null || !annual.isAssessing()) {
+            return Collections.emptyList();
+        }
+
+        // 查询当前用户所在部门的所有民主测评填报
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> qw = new LambdaQueryWrapper<>();
+
+        if (roles.contains("director_leader")) {
+            List<String> specialPeople = new ArrayList<>();
+
+            // LambdaQueryWrapper<AssessAssistConfig> configQw1 = new LambdaQueryWrapper<>();
+            // configQw1.like(AssessAssistConfig::getLeader, sysUser.getId());
+            List<AssessAssistConfig> assistConfig = assistConfigMapper.selectList(null);
+            for (AssessAssistConfig config : assistConfig) {
+                if (!specialPeople.contains(config.getHashId())) {
+                    specialPeople.add(config.getHashId());
+                }
+            }
+
+            // LambdaQueryWrapper<AssessLeaderConfig> configQw2 = new LambdaQueryWrapper<>();
+            // configQw2.eq(AssessLeaderConfig::getLeader, sysUser.getId());
+            List<AssessLeaderConfig> leaderConfig = leaderConfigMapper.selectList(null);
+            for (AssessLeaderConfig config : leaderConfig) {
+                if (!specialPeople.contains(config.getHashId())) {
+                    specialPeople.add(config.getHashId());
+                }
+            }
+
+
+            if (!specialPeople.isEmpty()) {
+                qw.notIn(AssessDemocraticEvaluationSummary::getAppraisee, specialPeople);
+            }
+        }
+
+        qw.in(AssessDemocraticEvaluationSummary::getDepart, departIdList);
+        qw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, annual.getCurrentYear());
+        qw.orderByDesc(AssessDemocraticEvaluationSummary::getType);
+        List<AssessDemocraticEvaluationSummary> summaries = summaryMapper.selectList(qw);
+
+        qw.clear();
+
+        if (departIdList.contains("JG")) {
+            // 获取当前账号所在考核单元
+            AssessLeaderDepartConfig unit = null;
+            if (roles.contains("director_leader")) {
+                unit = this.getAssessUnitByLeader(sysUser.getId());
+            } else {
+                unit = this.getAssessUnitByDepart(sysUser.getDepart());
+            }
+            String unitDeparts = unit.getDepartId();
+            List<String> unitDepartList = Arrays.asList(unitDeparts.split(","));
+
+            // departIdList中所有元素前面加上JG
+            List<String> departIdListWithJG = unitDepartList.stream().map(departId -> "JG" + departId).collect(Collectors.toList());
+            qw.in(AssessDemocraticEvaluationSummary::getDepart, departIdListWithJG);
+            qw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, annual.getCurrentYear());
+            qw.orderByDesc(AssessDemocraticEvaluationSummary::getType);
+            List<AssessDemocraticEvaluationSummary> summariesWithJG = summaryMapper.selectList(qw);
+            summaries.addAll(summariesWithJG);
+            qw.clear();
+        }
+
+        if (!roles.contains("department_cadre_admin")) {
+            // 局领导不测评基层副职
+            if (roles.contains("director_leader")) {
+                // 过滤：去除departType不为bureau的并且type为22的记录
+                summaries = summaries.stream()
+                        .filter(summary -> !summary.getType().equals("31"))
+                        .collect(Collectors.toList());
+
+
+                LambdaQueryWrapper<AssessLeaderConfig> lqw = new LambdaQueryWrapper<>();
+                lqw.eq(AssessLeaderConfig::getLeader, sysUser.getId());
+                List<AssessLeaderConfig> leaderConfigs = leaderConfigMapper.selectList(lqw);
+
+                if (leaderConfigs != null && !leaderConfigs.isEmpty()) {
+                    List<String> personHashId = leaderConfigs.stream().map(AssessLeaderConfig::getHashId).collect(Collectors.toList());
+
+                    qw.in(AssessDemocraticEvaluationSummary::getAppraisee, personHashId);
+                    qw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, annual.getCurrentYear());
+                    qw.orderByDesc(AssessDemocraticEvaluationSummary::getType);
+                    List<AssessDemocraticEvaluationSummary> s = summaryMapper.selectList(qw);
+                    qw.clear();
+
+                    if (s != null && !s.isEmpty()) {
+                        summaries.addAll(s);
+                    }
+                }
+
+                LambdaQueryWrapper<AssessAssistConfig> lqw2 = new LambdaQueryWrapper<>();
+                lqw2.like(AssessAssistConfig::getLeader, sysUser.getId());
+                List<AssessAssistConfig> assistConfigs = assistConfigMapper.selectList(lqw2);
+
+                if (assistConfigs != null && !assistConfigs.isEmpty()) {
+                    List<String> personHashId = assistConfigs.stream().map(AssessAssistConfig::getHashId).collect(Collectors.toList());
+                    qw.in(AssessDemocraticEvaluationSummary::getAppraisee, personHashId);
+                    qw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, annual.getCurrentYear());
+                    qw.orderByDesc(AssessDemocraticEvaluationSummary::getType);
+                    List<AssessDemocraticEvaluationSummary> s = summaryMapper.selectList(qw);
+                    qw.clear();
+
+                    if (s != null && !s.isEmpty()) {
+                        summaries.addAll(s);
+                    }
+                }
+
+                if (!summaries.isEmpty()) {
+                    List<String> dSummaryIds = summaries.stream().map(AssessDemocraticEvaluationSummary::getId).collect(Collectors.toList());
+
+                    LambdaQueryWrapper<AssessDemocraticEvaluation> lqw3 = new LambdaQueryWrapper<>();
+                    lqw3.in(AssessDemocraticEvaluation::getEvaluationSummaryId, dSummaryIds);
+                    lqw3.eq(AssessDemocraticEvaluation::getCreateBy, sysUser.getUsername());
+                    List<AssessDemocraticEvaluation> assessDemocraticEvaluations = democraticEvaluationMapper.selectList(lqw3);
+
+                    if (assessDemocraticEvaluations != null && !assessDemocraticEvaluations.isEmpty()) {
+                        List<String> filledIds = assessDemocraticEvaluations.stream().map(AssessDemocraticEvaluation::getEvaluationSummaryId).collect(Collectors.toList());
+
+
+                        if (!filledIds.isEmpty())
+                            summaries = summaries.stream().filter(summary -> !filledIds.contains(summary.getId())).collect(Collectors.toList());
+                    }
+                }
+            }
+
+
+            // 基层A票只查询副职
+//            if (!roles.contains("director_leader") && "basic_AB".equals(sysUser.getVoteType())) {
+//                summaries = summaries.stream()
+//                        .filter(summary -> summary.getType().equals("31"))
+//                        .collect(Collectors.toList());
+//            }
+
+            // 机关C票不查询总师、二巡
+            if (!roles.contains("director_leader") && "bureau_C".equals(sysUser.getVoteType())) {
+                summaries = summaries.stream()
+                        .filter(summary -> !summary.getType().equals("23"))
+                        .collect(Collectors.toList());
+            }
+        }
+
+        List<String> allPeople = new ArrayList<>();
+
+        // 封装返回数据
+        if (summaries != null && !summaries.isEmpty()) {
+            List<DemocraticFillListVO> list = new ArrayList<>();
+            for (AssessDemocraticEvaluationSummary summary : summaries) {
+                DemocraticFillListVO vo = new DemocraticFillListVO();
+                vo.setAppraisee(summary.getAppraisee());
+                vo.setDepartId(summary.getDepart());
+                vo.setAssessName(summary.getAssessName());
+                vo.setType(summary.getType());
+                vo.setSummaryId(summary.getId());
+                vo.setEndDate(summary.getEndDate());
+                vo.setCurrentYear(summary.getCurrentYear());
+                list.add(vo);
+                allPeople.add(summary.getAppraisee());
+            }
+
+            LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();
+            lqw.eq(AssessAnnualSummary::getCurrentYear, annual.getCurrentYear());
+            lqw.in(AssessAnnualSummary::getHashId, allPeople);
+            lqw.ne(AssessAnnualSummary::getHashId, "group");
+            lqw.orderByAsc(AssessAnnualSummary::getPersonOrder);
+            List<AssessAnnualSummary> annualSummaries = annualSummaryMapper.selectList(lqw);
+
+            if (annualSummaries != null && !annualSummaries.isEmpty()) {
+                List<DemocraticFillListVO> groupList = list.stream().filter(vo -> "group".equals(vo.getAppraisee())).collect(Collectors.toList());
+                List<DemocraticFillListVO> peopleList = list.stream().filter(vo -> !"group".equals(vo.getAppraisee())).collect(Collectors.toList());
+
+
+                // 将list根据annualSummaries的顺序排序，annualSummaries中的hashId属性对应list中的appraisee属性
+                peopleList.sort(Comparator.comparing(o -> annualSummaries.stream().filter(a -> a.getHashId().equals(o.getAppraisee())).findFirst().get().getPersonOrder()));
+
+                list = new ArrayList<>();
+                list.addAll(groupList);
+                list.addAll(peopleList);
+            }
+
+            return list;
+        }
+
+        return Collections.emptyList();
+    }
+
+    @Autowired
+    private AssessLeaderRecItemMapper leaderRecItemMapper;
+    @Autowired
+    private AssessLeaderRecMapper leaderRecMapper;
+
+    private List<AssessLeaderRecItem> getLeaderRecommendList(String leaderId, String year) {
+
+        LambdaQueryWrapper<AssessLeaderRec> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessLeaderRec::getLeader, leaderId);
+        lqw.eq(AssessLeaderRec::getCurrentYear, year);
+        AssessLeaderRec leaderRecs = leaderRecMapper.selectOne(lqw);
+
+        if (leaderRecs == null) {
+            throw new JeecgBootException("当前年度考核未到推优节点，详情请联系管理员！");
+        }
+
+        if ("1".equals(leaderRecs.getStatus())) {
+            throw new JeecgBootException("当前年度考核未到推优节点，详情请联系管理员！");
+        }
+
+        String mainId = leaderRecs.getId();
+
+        LambdaQueryWrapper<AssessLeaderRecItem> lqw2 = new LambdaQueryWrapper<>();
+        lqw2.eq(AssessLeaderRecItem::getMainId, mainId);
+        List<AssessLeaderRecItem> items = leaderRecItemMapper.selectList(lqw2);
+
+        // 对item排序，通过personOrder，升序，如果personOrder为空，排在后面
+        // items.sort(Comparator.comparing(AssessLeaderRecItem::getPersonOrder, Comparator.nullsLast(Comparator.naturalOrder())));
+        items.sort(Comparator.comparing(AssessLeaderRecItem::getPersonOrder, Comparator.nullsLast(Comparator.comparingInt(Integer::parseInt))));
+
+        // 将正职兼二巡、正职、副职、其他分开
+        List<AssessLeaderRecItem> items1 = new ArrayList<>(); // 总师二巡
+        List<AssessLeaderRecItem> items2 = new ArrayList<>(); // 正职
+        List<AssessLeaderRecItem> items3 = new ArrayList<>(); // 副职
+        List<AssessLeaderRecItem> items4 = new ArrayList<>(); // 其他
+        for (AssessLeaderRecItem item : items) {
+            if ("正职兼总师、二巡".equals(item.getType())) item.setType("正职");
+
+            if ("局管总师二巡".equals(item.getDepartName())) {
+                items1.add(item);
+                continue;
+            }
+
+            switch (item.getType()) {
+                case "正职":
+                    items2.add(item);
+                    break;
+                case "副职":
+                    items3.add(item);
+                    break;
+                default:
+                    items4.add(item);
+                    break;
+            }
+        }
+
+        items.clear();
+        // 将正职兼二巡、正职、副职、其他合并， 顺序为正职兼总师、二巡、正职、副职、其他
+        items.addAll(items1);
+        items.addAll(items2);
+        items.addAll(items3);
+        items.addAll(items4);
+        return items;
     }
 
     private void handleAssessType(AssessType assessType, Date now, Date deadline, List<CommissionItem> commissionItems, String year) {

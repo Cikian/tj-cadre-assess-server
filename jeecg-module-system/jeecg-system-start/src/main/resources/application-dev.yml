@@ -174,7 +174,7 @@ jeecg:
     enabled: true
 #cas单点登录
 cas:
-  prefixUrl: http://cas.example.org:8443/cas
+  prefixUrl: http://www.pnr.cn/sso/#10.96.1.196
 #Mybatis输出sql日志
 logging:
   level:

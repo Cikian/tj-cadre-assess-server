@@ -1,11 +1,13 @@
 package org.jeecg.modules.sys;
 
+import com.alibaba.fastjson.JSONObject;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.CommissionItem;
 import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.system.entity.SysCategory;
 import org.jeecg.modules.system.entity.SysDictItem;
+import org.jeecg.modules.system.entity.SysUser;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -73,6 +75,8 @@ public interface AssessCommonApi {
 
     Map<String, String> getDictMapByCode(String code);
 
+    List<AssessCurrentAssess> getAssessing();
 
+    JSONObject getAssessingStatus(SysUser user, List<AssessCurrentAssess> assessingList, JSONObject res);
 
 }

@@ -31,6 +31,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -447,6 +451,48 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
 	@Override
 	public SysUser checkOaUser(String OAUserId) {
+		if (OAUserId.endsWith("ossgbkh")) {
+			// 将ossgbkh替换为==
+			OAUserId = OAUserId.replace("ossgbkh", "=");
+		} else if (OAUserId.endsWith("ossdogbkh")) {
+			OAUserId = OAUserId.replace("ossdogbkh", "==");
+		}
+
+		String s = decryptToken(OAUserId);
+		System.out.println(s);
+
+		if (s == null){
+			return null;
+		}
+
+
+		// 检查是否与系统用户关联
+		LambdaQueryWrapper<SysUserOa> lqw = new LambdaQueryWrapper<>();
+		lqw.eq(SysUserOa::getOaUserId, s);
+		SysUserOa sysUserOa = sysUserOaMapper.selectOne(lqw);
+		if (sysUserOa != null) {
+			return this.getUserByName(sysUserOa.getUsername());
+		}
+
+		// 删除OAUserId中的数字
+		String username = s.replaceAll("\\d", "");
+		SysUser userByName = this.getUserByName(username);
+		if (userByName != null) {
+			// 存入关联表
+			SysUserOa userOa = new SysUserOa();
+			userOa.setOaUserId(s);
+			userOa.setUsername(userByName.getUsername());
+			sysUserOaMapper.insert(userOa);
+
+			return userByName;
+		}
+
+		return null;
+	}
+
+
+	public SysUser getOaUser(String OAUserId) {
+
 		// 检查是否与系统用户关联
 		LambdaQueryWrapper<SysUserOa> lqw = new LambdaQueryWrapper<>();
 		lqw.eq(SysUserOa::getOaUserId, OAUserId);
@@ -469,6 +515,141 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 		}
 
 		return null;
+	}
+
+	public static String decryptToken(String encodedFinal) {
+		try {
+			// 1. Base64解码最外层
+			byte[] decodedBytes = Base64.getDecoder().decode(encodedFinal);
+			String decodedStr = new String(decodedBytes);
+
+			// 2. 分离编码数据和时间戳部分
+			String[] parts = decodedStr.split(":=:");
+			if (parts.length != 2) {
+				throw new IllegalArgumentException("Invalid token format");
+			}
+
+			String encoded = parts[0];
+			String transformedTimestamp = parts[1];
+
+			// 3. 反转字符串
+			String reversed = new StringBuilder(encoded).reverse().toString();
+
+			// 4. 移除随机字符串（最后6位）
+			String base64Reversed = reversed.substring(0, reversed.length() - 6);
+
+			// 5. 再次反转得到原始Base64
+			String originalBase64 = new StringBuilder(base64Reversed).reverse().toString();
+
+			// 6. Base64解码原始数据
+			byte[] originalDataBytes = Base64.getDecoder().decode(originalBase64);
+			String originalData = new String(originalDataBytes);
+
+			// 7. 验证时间戳
+			String[] dataParts = originalData.split(":");
+			if (dataParts.length != 2) {
+				throw new IllegalArgumentException("Invalid data format");
+			}
+
+			String userId = dataParts[0];
+			String originalTimestamp = dataParts[1];
+
+			// 8. 还原时间戳
+			char[] tsArr = transformedTimestamp.toCharArray();
+			for (int i = 0; i < tsArr.length - 1; i += 2) {
+				char temp = tsArr[i];
+				tsArr[i] = tsArr[i + 1];
+				tsArr[i + 1] = temp;
+			}
+			String timestamp = new String(tsArr);
+
+			if (!timestamp.equals(originalTimestamp)) {
+				throw new SecurityException("Timestamp validation failed");
+			}
+
+			return userId;
+
+		} catch (Exception e) {
+			System.err.println("Decryption failed: " + e.getMessage());
+			return null;
+		}
+	}
+
+	public static String decryptFromUrl(String encryptedData) {
+		try {
+			// 1. Base64解码外层编码
+			byte[] decoded = Base64.getDecoder().decode(encryptedData);
+			String combinedStr = new String(decoded, StandardCharsets.UTF_8);
+
+			// 2. 分离加密数据和变换后的时间戳
+			String[] parts = combinedStr.split("=");
+			if (parts.length != 2) {
+				throw new IllegalArgumentException("无效的加密数据格式");
+			}
+
+			String base64UrlData = parts[0];
+			String transformedTimestamp = parts[1];
+
+			// 3. 还原时间戳
+			String timestampStr = reverseTransformTimestamp(transformedTimestamp);
+			long timestamp = Long.parseLong(timestampStr);
+
+			// 4. Base64URL解码加密数据
+			byte[] combined = Base64.getUrlDecoder().decode(base64UrlData);
+
+			// 5. 分离IV（前12字节）和加密数据
+			byte[] iv = new byte[12];
+			byte[] encrypted = new byte[combined.length - 12];
+			System.arraycopy(combined, 0, iv, 0, 12);
+			System.arraycopy(combined, 12, encrypted, 0, encrypted.length);
+
+			String SECRET_KEY = "5g-6hcikianr!gt5";
+			int GCM_TAG_LENGTH = 128;
+			// 6. 准备AES-GCM解密器
+			SecretKeySpec keySpec = new SecretKeySpec(
+					SECRET_KEY.getBytes(StandardCharsets.UTF_8),
+					"AES"
+			);
+			GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(
+					GCM_TAG_LENGTH,
+					iv
+			);
+
+			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+			cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmParameterSpec);
+
+			// 7. 解密数据
+			byte[] decrypted = cipher.doFinal(encrypted);
+			String decryptedData = new String(decrypted, StandardCharsets.UTF_8);
+
+			// 8. 验证时间戳是否匹配
+			String[] dataParts = decryptedData.split(":");
+			if (dataParts.length != 2) {
+				throw new IllegalArgumentException("解密数据格式无效");
+			}
+
+			long decryptedTimestamp = Long.parseLong(dataParts[1]);
+			if (decryptedTimestamp != timestamp) {
+				throw new SecurityException("时间戳不匹配，数据可能被篡改");
+			}
+
+			return dataParts[0]; // 返回用户ID
+		} catch (Exception e) {
+			System.err.println("解密失败: " + e.getMessage());
+			return null;
+		}
+	}
+
+	// 时间戳反变换（与JavaScript端的变换对应）
+	private static String reverseTransformTimestamp(String transformed) {
+		char[] arr = transformed.toCharArray();
+		// 奇偶位交换（与加密时相同的操作）
+		for (int i = 0; i < arr.length - 1; i += 2) {
+			char temp = arr[i];
+			arr[i] = arr[i + 1];
+			arr[i + 1] = temp;
+		}
+		return new String(arr);
 	}
 
 	@Override

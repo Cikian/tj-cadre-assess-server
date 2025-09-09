@@ -4,6 +4,7 @@ import org.jeecg.modules.sys.entity.annual.AssessDemocraticEvaluation;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.jeecg.modules.annual.vo.DemocraticFillListVO;
 import org.jeecg.modules.annual.vo.DemocraticSubmitPage;
+import org.jeecg.modules.system.entity.SysUser;
 
 import java.util.List;
 
@@ -24,6 +25,7 @@ public interface IAssessDemocraticEvaluationService extends IService<AssessDemoc
 	public List<AssessDemocraticEvaluation> selectByMainId(String mainId);
 
     List<DemocraticFillListVO> getAnonymousList();
+    List<DemocraticFillListVO> getAnonymousList(SysUser user);
 
     void submit(List<DemocraticSubmitPage> democraticSubmitPage);
 }

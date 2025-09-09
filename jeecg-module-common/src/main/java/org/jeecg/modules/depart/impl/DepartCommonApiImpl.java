@@ -1,279 +1,1 @@
-package org.jeecg.modules.depart.impl;
-
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.apache.shiro.SecurityUtils;
-import org.jeecg.common.constant.CacheConstant;
-import org.jeecg.common.constant.CommonConstant;
-import org.jeecg.common.system.api.ISysBaseAPI;
-import org.jeecg.common.util.oConvertUtils;
-import org.jeecg.modules.depart.DepartCommonApi;
-import org.jeecg.common.system.vo.LoginUser;
-import org.jeecg.common.system.vo.SysDepartModel;
-import org.jeecg.modules.depart.dto.DepartLeadersDTO;
-import org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO;
-import org.jeecg.modules.depart.mapper.DepartCommonMapper;
-import org.jeecg.modules.sys.entity.annual.AssessAnnualSummary;
-import org.jeecg.modules.sys.mapper.annual.AssessAnnualSummaryMapper;
-import org.jeecg.modules.system.entity.*;
-import org.jeecg.modules.system.mapper.SysDepartMapper;
-import org.jeecg.modules.system.mapper.SysDictMapper;
-import org.jeecg.modules.system.mapper.SysUserDepartMapper;
-import org.jeecg.modules.system.mapper.SysUserMapper;
-import org.jeecg.modules.system.model.SysDepartTreeModel;
-import org.jeecg.modules.system.service.ISysDictItemService;
-import org.jeecg.modules.system.service.ISysDictService;
-import org.jeecg.modules.system.service.impl.SysBaseApiImpl;
-import org.jeecg.modules.system.util.FindsDepartsChildrenUtil;
-import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Service;
-
-import java.util.*;
-
-@Service
-public class DepartCommonApiImpl extends SysBaseApiImpl implements DepartCommonApi {
-    @Autowired
-    private SysUserDepartMapper sysUserDepartMapper;
-    @Autowired
-    private SysDepartMapper sysDepartMapper;
-    @Autowired
-    private SysUserMapper sysUserMapper;
-    @Autowired
-    private ISysDictItemService sysDictItemService;
-    @Autowired
-    private ISysDictService sysDictService;
-    @Autowired
-    private SysDictMapper sysDictMapper;
-    @Autowired
-    private ISysBaseAPI sysBaseAPI;
-    @Autowired
-    private DepartCommonMapper departCommonMapper;
-    @Autowired
-    private AssessAnnualSummaryMapper annualSummaryMapper;
-
-    @Override
-    public void saveAssessYear(String year) {
-        if (year == null || "".equals(year)) {
-            return;
-        }
-
-        LambdaQueryWrapper<SysDict> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(SysDict::getDictCode, "assess_year");
-        SysDict sysDict = sysDictMapper.selectOne(lqw);
-
-        SysDictItem sysDictItem = new SysDictItem();
-        sysDictItem.setItemText(year);
-        sysDictItem.setItemValue(year);
-        sysDictItem.setStatus(1);
-        sysDictItem.setDictId(sysDict.getId());
-        sysDictItemService.saveNewDictItem(sysDictItem);
-    }
-
-    @Override
-    public Map<String, String> getCurrentUserDepart() {
-        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
-        if (sysUser != null) {
-            LambdaQueryWrapper<SysUserDepart> query = new LambdaQueryWrapper<>();
-            query.eq(SysUserDepart::getUserId, sysUser.getId());
-            SysUserDepart sysUserDepart = sysUserDepartMapper.selectOne(query);
-            if (sysUserDepart != null) {
-                SysDepart sysDepart = sysDepartMapper.selectById(sysUserDepart.getDepId());
-                if (sysDepart != null) {
-                    Map<String, String> map = new HashMap<>();
-                    map.put("departId", sysDepart.getId());
-                    map.put("departName", sysDepart.getDepartName());
-                    map.put("alias", sysDepart.getAlias());
-                    map.put("departType", sysDepart.getDepartType());
-                    switch (sysDepart.getDepartType()) {
-                        case "1":
-                            map.put("departTypeText", "局机关各处室");
-                            break;
-                        case "2":
-                            map.put("departTypeText", "分局");
-                            break;
-                        case "3":
-                            map.put("departTypeText", "事业单位");
-                            break;
-                        case "4":
-                            map.put("departTypeText", "参公");
-                            break;
-                    }
-                    return map;
-                }
-            }
-        }
-        return null;
-    }
-
-    @Override
-    public List<SysDepartModel> queryAllDepart() {
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();
-        query.isNotNull(SysDepart::getDepartType);
-        return getSysDepartModels(query);
-    }
-
-    @Override
-    public List<SysDepartModel> queryDepartByType(List<String> types) {
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();
-        query.orderByAsc(SysDepart::getDepartOrder);
-        if (types != null && !types.isEmpty()) {
-            query.in(SysDepart::getDepartType, types);
-        } else {
-            return null;
-        }
-        return getSysDepartModels(query);
-    }
-
-    @Override
-    public List<SysDepartModel> queryDepartByType(String[] types) {
-        List<String> list = Arrays.asList(types);
-        return this.queryDepartByType(list);
-    }
-
-    @Override
-    public List<DepartLeadersDTO> queryDepartLeaders(String departId) {
-        return departCommonMapper.queryDepartLeaders(departId);
-    }
-
-    @Override
-    public List<SysUser> queryDepartLeadersByPage(String departId, int pageSize, int pageNo) {
-        int offset = (pageNo - 1) * pageSize;
-        int depth = pageSize;
-        return departCommonMapper.queryDepartLeadersByPage(departId, offset, depth);
-    }
-
-    @Override
-    public DepartLeadersRegularGradeDTO queryDepartLeaderRegularGrade(String hashId, String year) {
-        DepartLeadersRegularGradeDTO regularGradeDTO = departCommonMapper.queryDepartLeaderAndRegularGrade(hashId, year);
-
-        if ("正职".equals(regularGradeDTO.getRoleCode())) {
-            regularGradeDTO.setType("chief");
-        } else if ("副职".equals(regularGradeDTO.getRoleCode())) {
-            regularGradeDTO.setType("deputy");
-        }
-
-        return regularGradeDTO;
-    }
-
-    @Override
-    public SysDepart queryDepartById(String departId) {
-        return sysDepartMapper.selectById(departId);
-    }
-
-    @Override
-    @Cacheable(value = CacheConstant.SYS_DEPARTS_CACHE)
-    public List<SysDepartTreeModel> queryTreeList() {
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();
-        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());
-        query.orderByAsc(SysDepart::getDepartOrder);
-        List<SysDepart> list = sysDepartMapper.selectList(query);
-        this.setUserIdsByDepList(list);
-        List<SysDepartTreeModel> listResult = FindsDepartsChildrenUtil.wrapTreeDataToTreeList(list);
-        return listResult;
-    }
-
-    @Override
-    public List<SysDepartTreeModel> queryTreeList(String ids) {
-        List<SysDepartTreeModel> listResult = new ArrayList<>();
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();
-        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());
-        if (oConvertUtils.isNotEmpty(ids)) {
-            query.in(true, SysDepart::getId, ids.split(","));
-        }
-        query.orderByAsc(SysDepart::getDepartOrder);
-        List<SysDepart> list = sysDepartMapper.selectList(query);
-        for (SysDepart depart : list) {
-            listResult.add(new SysDepartTreeModel(depart));
-        }
-        return listResult;
-    }
-
-    @Override
-    public List<SysDepartTreeModel> queryTreeList(List<String> types) {
-        List<SysDepartTreeModel> listResult = new ArrayList<>();
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();
-        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());
-        if (oConvertUtils.isNotEmpty(types)) {
-            query.in(true, SysDepart::getDepartType, types);
-        }
-        query.orderByAsc(SysDepart::getDepartOrder);
-        List<SysDepart> list = sysDepartMapper.selectList(query);
-        for (SysDepart depart : list) {
-            listResult.add(new SysDepartTreeModel(depart));
-        }
-        for (SysDepartTreeModel treeModel : listResult) {
-            treeModel.setChildren(null);
-        }
-        return listResult;
-    }
-
-    @Override
-    public String getDepartTypeById(String departId) {
-        if("0".equals(departId)){
-            Map<String, String> currentUserDepart = getCurrentUserDepart();
-            departId = currentUserDepart.get("departId");
-        }
-
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();
-        query.eq(SysDepart::getId, departId);
-        SysDepart sysDepart = sysDepartMapper.selectOne(query);
-        return sysDepart.getDepartType();
-    }
-
-    @Override
-    public String getDepartTypeByName(String departName) {
-        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();
-        query.eq(SysDepart::getDepartName, departName);
-        SysDepart sysDepart = sysDepartMapper.selectOne(query);
-        return sysDepart.getDepartType();
-    }
-
-    @NotNull
-    private List<SysDepartModel> getSysDepartModels(LambdaQueryWrapper<SysDepart> query) {
-        List<SysDepart> sysDeparts = sysDepartMapper.selectList(query);
-        List<SysDepartModel> sysDepartModels = new ArrayList<>();
-        sysDeparts.forEach(sysDepart -> {
-            SysDepartModel sysDepartModel = new SysDepartModel();
-            BeanUtils.copyProperties(sysDepart, sysDepartModel);
-            sysDepartModels.add(sysDepartModel);
-        });
-
-        return sysDepartModels;
-    }
-
-    /**
-     * 通过部门集合为部门设置用户id，用于前台展示
-     *
-     * @param departList 部门集合
-     */
-    private void setUserIdsByDepList(List<SysDepart> departList) {
-        // 查询负责部门不为空的情况
-        LambdaQueryWrapper<SysUser> query = new LambdaQueryWrapper<>();
-        query.isNotNull(SysUser::getDepartIds);
-        List<SysUser> users = sysUserMapper.selectList(query);
-        Map<String, Object> map = new HashMap(5);
-        // 先循环一遍找到不同的负责部门id
-        for (SysUser user : users) {
-            String departIds = user.getDepartIds();
-            String[] departIdArray = departIds.split(",");
-            for (String departId : departIdArray) {
-                // mao中包含部门key，负责用户直接拼接
-                if (map.containsKey(departId)) {
-                    String userIds = map.get(departId) + "," + user.getId();
-                    map.put(departId, userIds);
-                } else {
-                    map.put(departId, user.getId());
-                }
-            }
-        }
-        // 循环部门集合找到部门id对应的负责用户
-        for (SysDepart sysDepart : departList) {
-            if (map.containsKey(sysDepart.getId())) {
-                sysDepart.setDirectorUserIds(map.get(sysDepart.getId()).toString());
-            }
-        }
-    }
-
-}
+package org.jeecg.modules.depart.impl;import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;import org.apache.shiro.SecurityUtils;import org.jeecg.common.constant.CacheConstant;import org.jeecg.common.constant.CommonConstant;import org.jeecg.common.system.api.ISysBaseAPI;import org.jeecg.common.util.oConvertUtils;import org.jeecg.modules.depart.DepartCommonApi;import org.jeecg.common.system.vo.LoginUser;import org.jeecg.common.system.vo.SysDepartModel;import org.jeecg.modules.depart.dto.DepartLeadersDTO;import org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO;import org.jeecg.modules.depart.mapper.DepartCommonMapper;import org.jeecg.modules.sys.entity.annual.AssessAnnualSummary;import org.jeecg.modules.sys.mapper.annual.AssessAnnualSummaryMapper;import org.jeecg.modules.system.entity.*;import org.jeecg.modules.system.mapper.SysDepartMapper;import org.jeecg.modules.system.mapper.SysDictMapper;import org.jeecg.modules.system.mapper.SysUserDepartMapper;import org.jeecg.modules.system.mapper.SysUserMapper;import org.jeecg.modules.system.model.SysDepartTreeModel;import org.jeecg.modules.system.service.ISysDictItemService;import org.jeecg.modules.system.service.ISysDictService;import org.jeecg.modules.system.service.impl.SysBaseApiImpl;import org.jeecg.modules.system.util.FindsDepartsChildrenUtil;import org.jetbrains.annotations.NotNull;import org.springframework.beans.BeanUtils;import org.springframework.beans.factory.annotation.Autowired;import org.springframework.cache.annotation.Cacheable;import org.springframework.stereotype.Service;import java.util.*;@Servicepublic class DepartCommonApiImpl extends SysBaseApiImpl implements DepartCommonApi {    @Autowired    private SysUserDepartMapper sysUserDepartMapper;    @Autowired    private SysDepartMapper sysDepartMapper;    @Autowired    private SysUserMapper sysUserMapper;    @Autowired    private ISysDictItemService sysDictItemService;    @Autowired    private ISysDictService sysDictService;    @Autowired    private SysDictMapper sysDictMapper;    @Autowired    private ISysBaseAPI sysBaseAPI;    @Autowired    private DepartCommonMapper departCommonMapper;    @Autowired    private AssessAnnualSummaryMapper annualSummaryMapper;    @Override    public void saveAssessYear(String year) {        if (year == null || "".equals(year)) {            return;        }        LambdaQueryWrapper<SysDict> lqw = new LambdaQueryWrapper<>();        lqw.eq(SysDict::getDictCode, "assess_year");        SysDict sysDict = sysDictMapper.selectOne(lqw);        SysDictItem sysDictItem = new SysDictItem();        sysDictItem.setItemText(year);        sysDictItem.setItemValue(year);        sysDictItem.setStatus(1);        sysDictItem.setDictId(sysDict.getId());        sysDictItemService.saveNewDictItem(sysDictItem);    }    @Override    public Map<String, String> getCurrentUserDepart() {        LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();        if (sysUser != null) {            LambdaQueryWrapper<SysUserDepart> query = new LambdaQueryWrapper<>();            query.eq(SysUserDepart::getUserId, sysUser.getId());            SysUserDepart sysUserDepart = sysUserDepartMapper.selectOne(query);            if (sysUserDepart != null) {                SysDepart sysDepart = sysDepartMapper.selectById(sysUserDepart.getDepId());                if (sysDepart != null) {                    Map<String, String> map = new HashMap<>();                    map.put("departId", sysDepart.getId());                    map.put("departName", sysDepart.getDepartName());                    map.put("alias", sysDepart.getAlias());                    map.put("departType", sysDepart.getDepartType());                    switch (sysDepart.getDepartType()) {                        case "1":                            map.put("departTypeText", "局机关各处室");                            break;                        case "2":                            map.put("departTypeText", "分局");                            break;                        case "3":                            map.put("departTypeText", "事业单位");                            break;                        case "4":                            map.put("departTypeText", "参公");                            break;                    }                    return map;                }            }        }        return null;    }    @Override    public List<SysDepartModel> queryAllDepart() {        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();        query.isNotNull(SysDepart::getDepartType);        return getSysDepartModels(query);    }    @Override    public List<SysDepartModel> queryDepartByType(List<String> types) {        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();        query.orderByAsc(SysDepart::getDepartOrder);        if (types != null && !types.isEmpty()) {            query.in(SysDepart::getDepartType, types);        } else {            return null;        }        return getSysDepartModels(query);    }    @Override    public List<SysDepartModel> queryDepartByType(String[] types) {        List<String> list = Arrays.asList(types);        return this.queryDepartByType(list);    }    @Override    public List<DepartLeadersDTO> queryDepartLeaders(String departId) {        return departCommonMapper.queryDepartLeaders(departId);    }    @Override    public List<SysUser> queryDepartLeadersByPage(String departId, int pageSize, int pageNo) {        int offset = (pageNo - 1) * pageSize;        int depth = pageSize;        return departCommonMapper.queryDepartLeadersByPage(departId, offset, depth);    }    @Override    public DepartLeadersRegularGradeDTO queryDepartLeaderRegularGrade(String hashId, String year) {        DepartLeadersRegularGradeDTO regularGradeDTO = departCommonMapper.queryDepartLeaderAndRegularGrade(hashId, year);        if ("正职".equals(regularGradeDTO.getRoleCode())) {            regularGradeDTO.setType("chief");        } else if ("副职".equals(regularGradeDTO.getRoleCode())) {            regularGradeDTO.setType("deputy");        }        return regularGradeDTO;    }    @Override    public SysDepart queryDepartById(String departId) {        return sysDepartMapper.selectById(departId);    }    @Override    @Cacheable(value = CacheConstant.SYS_DEPARTS_CACHE)    public List<SysDepartTreeModel> queryTreeList() {        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());        query.orderByAsc(SysDepart::getDepartOrder);        List<SysDepart> list = sysDepartMapper.selectList(query);        this.setUserIdsByDepList(list);        List<SysDepartTreeModel> listResult = FindsDepartsChildrenUtil.wrapTreeDataToTreeList(list);        return listResult;    }    @Override    public List<SysDepartTreeModel> queryTreeList(String ids) {        List<SysDepartTreeModel> listResult = new ArrayList<>();        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());        if (oConvertUtils.isNotEmpty(ids)) {            query.in(true, SysDepart::getId, ids.split(","));        }        query.orderByAsc(SysDepart::getDepartOrder);        List<SysDepart> list = sysDepartMapper.selectList(query);        for (SysDepart depart : list) {            listResult.add(new SysDepartTreeModel(depart));        }        return listResult;    }    @Override    public List<SysDepartTreeModel> queryTreeList(List<String> types) {        List<SysDepartTreeModel> listResult = new ArrayList<>();        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<SysDepart>();        query.eq(SysDepart::getDelFlag, CommonConstant.DEL_FLAG_0.toString());        if (oConvertUtils.isNotEmpty(types)) {            query.in(true, SysDepart::getDepartType, types);        }        query.orderByAsc(SysDepart::getDepartOrder);        List<SysDepart> list = sysDepartMapper.selectList(query);        for (SysDepart depart : list) {            listResult.add(new SysDepartTreeModel(depart));        }        for (SysDepartTreeModel treeModel : listResult) {            treeModel.setChildren(null);        }        return listResult;    }    @Override    public String getDepartTypeById(String departId) {        if("0".equals(departId)){            Map<String, String> currentUserDepart = getCurrentUserDepart();            departId = currentUserDepart.get("departId");        }        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();        query.eq(SysDepart::getId, departId);        SysDepart sysDepart = sysDepartMapper.selectOne(query);        return sysDepart.getDepartType();    }    @Override    public String getDepartTypeByName(String departName) {        LambdaQueryWrapper<SysDepart> query = new LambdaQueryWrapper<>();        query.eq(SysDepart::getDepartName, departName);        SysDepart sysDepart = sysDepartMapper.selectOne(query);        return sysDepart.getDepartType();    }    @Override    public Map<String, String> getId2NameMap() {        Map<String, String> id2NameMap = new HashMap<>();        List<SysDepart> sysDeparts = sysDepartMapper.selectList(null);        for (SysDepart sysDepart : sysDeparts) {            id2NameMap.put(sysDepart.getId(), sysDepart.getDepartName());        }        return id2NameMap;    }    @NotNull    private List<SysDepartModel> getSysDepartModels(LambdaQueryWrapper<SysDepart> query) {        List<SysDepart> sysDeparts = sysDepartMapper.selectList(query);        List<SysDepartModel> sysDepartModels = new ArrayList<>();        sysDeparts.forEach(sysDepart -> {            SysDepartModel sysDepartModel = new SysDepartModel();            BeanUtils.copyProperties(sysDepart, sysDepartModel);            sysDepartModels.add(sysDepartModel);        });        return sysDepartModels;    }    /**     * 通过部门集合为部门设置用户id，用于前台展示     *     * @param departList 部门集合     */    private void setUserIdsByDepList(List<SysDepart> departList) {        // 查询负责部门不为空的情况        LambdaQueryWrapper<SysUser> query = new LambdaQueryWrapper<>();        query.isNotNull(SysUser::getDepartIds);        List<SysUser> users = sysUserMapper.selectList(query);        Map<String, Object> map = new HashMap(5);        // 先循环一遍找到不同的负责部门id        for (SysUser user : users) {            String departIds = user.getDepartIds();            String[] departIdArray = departIds.split(",");            for (String departId : departIdArray) {                // mao中包含部门key，负责用户直接拼接                if (map.containsKey(departId)) {                    String userIds = map.get(departId) + "," + user.getId();                    map.put(departId, userIds);                } else {                    map.put(departId, user.getId());                }            }        }        // 循环部门集合找到部门id对应的负责用户        for (SysDepart sysDepart : departList) {            if (map.containsKey(sysDepart.getId())) {                sysDepart.setDirectorUserIds(map.get(sysDepart.getId()).toString());            }        }    }}

@@ -25,12 +25,14 @@ import org.jeecg.modules.sys.AssessCommonApi;
 import org.jeecg.modules.sys.dto.ArrangeDTO;
 import org.jeecg.modules.sys.dto.UserToSelectDTO;
 import org.jeecg.modules.sys.entity.AssessCurrentAssess;
+import org.jeecg.modules.sys.entity.LeaderDepartHistory;
 import org.jeecg.modules.sys.entity.annual.AssessAnnualArrange;
 import org.jeecg.modules.sys.entity.annual.AssessAnnualFill;
 import org.jeecg.modules.sys.entity.annual.AssessAnnualSummary;
 import org.jeecg.modules.sys.entity.annual.AssessDemocraticEvaluationSummary;
 import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.sys.entity.report.AssessReportEvaluationSummary;
+import org.jeecg.modules.sys.mapper.LeaderDepartHistoryMapper;
 import org.jeecg.modules.sys.mapper.annual.AssessAnnualArrangeMapper;
 import org.jeecg.modules.sys.mapper.annual.AssessAnnualFillMapper;
 import org.jeecg.modules.sys.mapper.annual.AssessAnnualSummaryMapper;
@@ -58,6 +60,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -106,9 +109,11 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
     private SysThirdAccountMapper sysThirdAccountMapper;
     @Autowired
     private AssessAnnualFillMapper annualFillMapper;
+    @Autowired
+    private LeaderDepartHistoryMapper ldHistoryMapper;
 
     @Override
-    public IPage<SysUser> queryDepartUserPageList(String departId, String username, String realname, int pageSize, int pageNo, String id, boolean getLeader) {
+    public IPage<SysUser> queryDepartUserPageList(String departId, String username, String realname, int pageSize, int pageNo, String id, boolean getLeader, String year) {
         IPage<SysUser> pageList = null;
         if (!getLeader) {
             // 部门ID不存在 直接查询用户表即可
@@ -136,16 +141,20 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
                 pageList = this.baseMapper.queryDepartUserPageList(page, sysDepart.getOrgCode(), username, realname);
             }
         } else {
-            // 查询部门下的领导
-            List<SysUser> sysUsers = this.getAllLeader();
+            List<SysUser> sysUsers;
+            if (!"0".equals(year)) {
+                sysUsers = this.getHistoryAssessUnit(year);
+            } else {
+                sysUsers = this.getAllLeader();
+            }
             pageList = new Page<>();
             pageList.setRecords(sysUsers);
         }
         List<SysUser> userList = pageList.getRecords();
-        if (userList != null && userList.size() > 0) {
+        if (userList != null && !userList.isEmpty()) {
             List<String> userIds = userList.stream().map(SysUser::getId).collect(Collectors.toList());
-            Map<String, SysUser> map = new HashMap(5);
-            if (userIds != null && userIds.size() > 0) {
+            Map<String, SysUser> map = new HashMap<>(5);
+            if (!userIds.isEmpty()) {
                 // 查部门名称
                 // Map<String, String> useDepNames = this.getDepNamesByUserIds(userIds);
                 Map<String, String> useDepNames = this.getDepAliasByUserIds(userIds);
@@ -183,13 +192,9 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
     private Map<String, String> getDepNamesByUserIds(List<String> userIds) {
         List<SysUserDepVo> list = sysUserMapper.getDepNamesByUserIds(userIds);
 
-        Map<String, String> res = new HashMap(5);
+        Map<String, String> res = new HashMap<>(5);
         list.forEach(item -> {
-                    if (res.get(item.getUserId()) == null) {
-                        res.put(item.getUserId(), item.getDepartName());
-                    } else {
-                        res.put(item.getUserId(), res.get(item.getUserId()) + "," + item.getDepartName());
-                    }
+                    res.merge(item.getUserId(), item.getDepartName(), (a, b) -> a + "," + b);
                 }
         );
         return res;
@@ -198,13 +203,9 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
     private Map<String, String> getDepAliasByUserIds(List<String> userIds) {
         List<SysUserAliasVo> list = sysUserMapper.getDepAliasByUserIds(userIds);
 
-        Map<String, String> res = new HashMap(5);
+        Map<String, String> res = new HashMap<>(5);
         list.forEach(item -> {
-                    if (res.get(item.getUserId()) == null) {
-                        res.put(item.getUserId(), item.getAlias());
-                    } else {
-                        res.put(item.getUserId(), res.get(item.getUserId()) + "," + item.getAlias());
-                    }
+                    res.merge(item.getUserId(), item.getAlias(), (a, b) -> a + "," + b);
                 }
         );
         return res;
@@ -729,370 +730,300 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
         sysUserMapper.deleteById(id);
     }
 
+    // 常量定义
+    private static final String TEMP_ROLE_ID = "1834392963461025793";
+
     @Override
     public List<SysUser> addAnonymousAccount(String assess, String depart, String voteType, int voteNum) {
-        if (assess == null || depart == null || voteType == null || voteNum == 0) {
+        // 参数校验
+        if (assess == null || depart == null || voteType == null || voteNum <= 0) {
             throw new JeecgBootException("参数错误！");
         }
+
+        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo(assess);
+        if (currentAssessInfo == null || !currentAssessInfo.isAssessing()) {
+            throw new JeecgBootException("当前无正在进行中的年度考核民主测评！");
+        }
+
         List<SysUser> insertUsers = new ArrayList<>();
         List<SysUserRole> insertUserRoles = new ArrayList<>();
         List<SysUserDepart> insertUserDeparts = new ArrayList<>();
 
-        LambdaQueryWrapper<SysUser> lqw = new LambdaQueryWrapper<>();
-        lqw.isNotNull(SysUser::getPwdPlainText);
-        lqw.select(SysUser::getUsername);
-        List<SysUser> users = sysUserService.list(lqw);
-        Set<String> userNames = users.stream().map(SysUser::getUsername).collect(Collectors.toSet());
+        // 获取已存在的用户名集合
+        Set<String> userNames = getExistingUsernames();
 
-        String departType = departCommonApi.getDepartTypeById(depart);
+        // 根据考核类型和部门类型处理不同的投票类型
         if ("annual".equals(assess)) {
+            String departType = departCommonApi.getDepartTypeById(depart);
             if ("1".equals(departType)) {
-                switch (voteType) {
-                    case "B":
-                        for (int i = 0; i < voteNum; i++) {
-                            SysUser user = new SysUser();
-
-                            // 随机生成用户名
-                            String username = CommonUtils.randomString(6);
-                            while (userNames.contains(username)) {
-                                username = CommonUtils.randomString(6);
-                            }
-                            userNames.add(username);
-                            String id = IdWorker.getIdStr();
-                            user.setId(id);
-                            user.setUsername(username);
-                            List<AssessLeaderDepartConfig> leaderDepartConfigs = leaderDepartConfigMapper.selectList(null);
-
-                            if (leaderDepartConfigs != null) {
-                                for (AssessLeaderDepartConfig leaderDepartConfig : leaderDepartConfigs) {
-                                    if (leaderDepartConfig.getDepartId().contains(depart)) {
-                                        String departs = leaderDepartConfig.getDepartId();
-                                        String[] departList = departs.split(",");
-
-                                        Boolean b = this.hasChiefEngineer(leaderDepartConfig);
-
-                                        List<SysDepartModel> allDepart = departCommonApi.queryDepartByType(new String[]{"1"});
-
-                                        List<String> allDepartId = new ArrayList<>();
-                                        for (SysDepartModel d : allDepart) {
-                                            allDepartId.add(d.getId());
-                                        }
-
-                                        List<String> newList = new ArrayList<>();
-                                        for (String departId : departList) {
-                                            if (allDepartId.contains(departId)) {
-                                                newList.add(departId);
-                                            }
-                                        }
-
-                                        // departList转为字符串
-                                        String departIds = String.join(",", newList);
-
-                                        if (b) user.setDepartIds(departIds + ",JG");
-                                        else user.setDepartIds(departIds);
-                                        break;
-                                    }
-                                }
-                            } else {
-                                user.setDepartIds(depart);
-                            }
-                            user.setDepart(depart);
-                            user.setVoteType("bureau_B");
-                            user.setAssess(assess);
-                            // 生成匿名账号，将匿名账号存入待插入列表
-                            SysUser sysUser = addAnonymousUser(user);
-                            insertUsers.add(sysUser);
-
-                            // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                            SysUserRole userRole = new SysUserRole();
-                            userRole.setUserId(sysUser.getId());
-                            userRole.setRoleId("1834392963461025793");// 临时角色Id
-                            insertUserRoles.add(userRole);
-
-                            // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                            SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                            insertUserDeparts.add(userDepart);
-                        }
-                        break;
-                    case "C":
-                        for (int i = 0; i < voteNum; i++) {
-                            SysUser user = new SysUser();
-
-                            // 随机生成用户名
-                            String username = CommonUtils.randomString(6);
-                            while (userNames.contains(username)) {
-                                username = CommonUtils.randomString(6);
-                            }
-                            userNames.add(username);
-                            String id = IdWorker.getIdStr();
-                            user.setId(id);
-                            user.setUsername(username);
-                            user.setDepart(depart);
-                            user.setDepartIds(depart);
-                            user.setVoteType("bureau_C");
-                            user.setAssess(assess);
-                            // 生成匿名账号，将匿名账号存入待插入列表
-                            SysUser sysUser = addAnonymousUser(user);
-                            insertUsers.add(sysUser);
-
-                            // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                            SysUserRole userRole = new SysUserRole();
-                            userRole.setUserId(sysUser.getId());
-                            userRole.setRoleId("1834392963461025793");// 临时角色Id
-                            insertUserRoles.add(userRole);
-
-                            // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                            SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                            insertUserDeparts.add(userDepart);
-                        }
-                        break;
-                }
+                handleBureauVoteType(assess, depart, voteType, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts);
             } else {
-                switch (voteType) {
-                    case "A":
-                        for (int i = 0; i < voteNum; i++) {
-                            SysUser user = new SysUser();
-
-                            // 随机生成用户名
-                            String username = CommonUtils.randomString(6);
-                            while (userNames.contains(username)) {
-                                username = CommonUtils.randomString(6);
-                            }
-                            userNames.add(username);
-                            String id = IdWorker.getIdStr();
-                            user.setId(id);
-                            user.setUsername(username);
-
-                            user.setDepartIds(depart);
-                            user.setDepart(depart);
-                            user.setVoteType("basic_AB");
-                            user.setAssess(assess);
-                            // 生成匿名账号，将匿名账号存入待插入列表
-                            SysUser sysUser = addAnonymousUser(user);
-                            insertUsers.add(sysUser);
-
-                            // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                            SysUserRole userRole = new SysUserRole();
-                            userRole.setUserId(sysUser.getId());
-                            userRole.setRoleId("1834392963461025793");// 临时角色Id
-                            insertUserRoles.add(userRole);
-
-                            // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                            SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                            insertUserDeparts.add(userDepart);
-                        }
-                        break;
-                    case "B":
-                        for (int i = 0; i < voteNum; i++) {
-                            SysUser user = new SysUser();
-
-                            // 随机生成用户名
-                            String username = CommonUtils.randomString(6);
-                            while (userNames.contains(username)) {
-                                username = CommonUtils.randomString(6);
-                            }
-                            userNames.add(username);
-                            String id = IdWorker.getIdStr();
-                            user.setId(id);
-                            user.setUsername(username);
-
-                            user.setDepartIds(depart);
-                            user.setDepart(depart);
-                            user.setVoteType("basic_B");
-                            user.setAssess(assess);
-                            // 生成匿名账号，将匿名账号存入待插入列表
-                            SysUser sysUser = addAnonymousUser(user);
-                            insertUsers.add(sysUser);
-
-                            // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                            SysUserRole userRole = new SysUserRole();
-                            userRole.setUserId(sysUser.getId());
-                            userRole.setRoleId("1834392963461025793");// 临时角色Id
-                            insertUserRoles.add(userRole);
-
-                            // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                            SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                            insertUserDeparts.add(userDepart);
-                        }
-                        break;
-                    case "C":
-                        for (int i = 0; i < voteNum; i++) {
-                            SysUser user = new SysUser();
-
-                            // 随机生成用户名
-                            String username = CommonUtils.randomString(6);
-                            while (userNames.contains(username)) {
-                                username = CommonUtils.randomString(6);
-                            }
-                            userNames.add(username);
-                            String id = IdWorker.getIdStr();
-                            user.setId(id);
-                            user.setUsername(username);
-                            user.setDepart(depart);
-                            user.setDepartIds(depart);
-                            user.setVoteType("basic_C");
-                            user.setAssess(assess);
-                            // 生成匿名账号，将匿名账号存入待插入列表
-                            SysUser sysUser = addAnonymousUser(user);
-                            insertUsers.add(sysUser);
-
-                            // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                            SysUserRole userRole = new SysUserRole();
-                            userRole.setUserId(sysUser.getId());
-                            userRole.setRoleId("1834392963461025793");// 临时角色Id
-                            insertUserRoles.add(userRole);
-
-                            // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                            SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                            insertUserDeparts.add(userDepart);
-                        }
-                        break;
-                }
+                handleBasicVoteType(assess, depart, voteType, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts);
             }
         } else {
-            switch (voteType) {
-                case "A":
-                    for (int i = 0; i < voteNum; i++) {
-                        SysUser user = new SysUser();
-
-                        // 随机生成用户名
-                        String username = CommonUtils.randomString(6);
-                        while (userNames.contains(username)) {
-                            username = CommonUtils.randomString(6);
-                        }
-                        userNames.add(username);
-                        String id = IdWorker.getIdStr();
-                        user.setId(id);
-                        user.setUsername(username);
-
-                        user.setDepartIds(depart);
-                        user.setDepart(depart);
-                        user.setVoteType("A");
-                        user.setAssess(assess);
-                        // 生成匿名账号，将匿名账号存入待插入列表
-                        SysUser sysUser = addAnonymousUser(user);
-                        insertUsers.add(sysUser);
-
-                        // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                        SysUserRole userRole = new SysUserRole();
-                        userRole.setUserId(sysUser.getId());
-                        userRole.setRoleId("1834392963461025793");// 临时角色Id
-                        insertUserRoles.add(userRole);
-
-                        // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                        SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                        insertUserDeparts.add(userDepart);
-                    }
-                    break;
-                case "B":
-                    for (int i = 0; i < voteNum; i++) {
-                        SysUser user = new SysUser();
-
-                        // 随机生成用户名
-                        String username = CommonUtils.randomString(6);
-                        while (userNames.contains(username)) {
-                            username = CommonUtils.randomString(6);
-                        }
-                        userNames.add(username);
-                        String id = IdWorker.getIdStr();
-                        user.setId(id);
-                        user.setUsername(username);
-
-                        user.setDepartIds(depart);
-                        user.setDepart(depart);
-                        user.setVoteType("B");
-                        user.setAssess(assess);
-                        // 生成匿名账号，将匿名账号存入待插入列表
-                        SysUser sysUser = addAnonymousUser(user);
-                        insertUsers.add(sysUser);
-
-                        // 将匿名账号与临时角色绑定，将绑定信息存入待插入列表
-                        SysUserRole userRole = new SysUserRole();
-                        userRole.setUserId(sysUser.getId());
-                        userRole.setRoleId("1834392963461025793");// 临时角色Id
-                        insertUserRoles.add(userRole);
-
-                        // 将匿名账号与部门绑定，将绑定信息存入待插入列表
-                        SysUserDepart userDepart = new SysUserDepart(sysUser.getId(), depart);
-                        insertUserDeparts.add(userDepart);
-                    }
-                    break;
-            }
+            handleOtherVoteType(assess, depart, voteType, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts);
         }
 
-        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false);
-        SysUserMapper userMapperNew = sqlSession.getMapper(SysUserMapper.class);
-        SysUserRoleMapper userRoleMapperNew = sqlSession.getMapper(SysUserRoleMapper.class);
-        SysUserDepartMapper userDepartMapperNew = sqlSession.getMapper(SysUserDepartMapper.class);
+        // 批量插入数据
+        batchInsertData(insertUsers, insertUserRoles, insertUserDeparts);
 
-        insertUsers.forEach(userMapperNew::insert);
-        insertUserRoles.forEach(userRoleMapperNew::insert);
-        insertUserDeparts.forEach(userDepartMapperNew::insert);
-
-        sqlSession.commit();
-        sqlSession.clearCache();
-        sqlSession.close();
-
-        // 更新票数
-        if ("annual".equals(assess)) {
-            AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-            LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw2 = new LambdaQueryWrapper<>();
-            lqw2.eq(AssessDemocraticEvaluationSummary::getDepart, depart);
-            lqw2.eq(AssessDemocraticEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
-            List<AssessDemocraticEvaluationSummary> summaries = democraticEvaluationSummaryMapper.selectList(lqw2);
-            if (summaries != null && !summaries.isEmpty()) {
-                for (AssessDemocraticEvaluationSummary summary : summaries) {
-                    summary.setNum(summary.getNum() + voteNum);
-                    democraticEvaluationSummaryMapper.updateById(summary);
-                }
-            }
-
-            LambdaQueryWrapper<AssessAnnualFill> lqw3 = new LambdaQueryWrapper<>();
-            lqw3.eq(AssessAnnualFill::getDepart, depart);
-            lqw3.eq(AssessAnnualFill::getCurrentYear, currentAssessInfo.getCurrentYear());
-            List<AssessAnnualFill> fills = annualFillMapper.selectList(lqw3);
-
-            String fillId = fills.get(0).getId();
-
-            LambdaQueryWrapper<AssessAnnualArrange> lqw4 = new LambdaQueryWrapper<>();
-            lqw4.eq(AssessAnnualArrange::getAnnualFillId, fillId);
-            AssessAnnualArrange arrange = annualArrangeMapper.selectList(lqw4).get(0);
-
-            if (voteType.equals("A")) {
-                arrange.setVoteA(arrange.getVoteA() + voteNum);
-                arrange.setChiefNum(arrange.getChiefNum() + voteNum);
-            }
-            if (voteType.equals("B")) {
-                arrange.setVoteB(arrange.getVoteB() + voteNum);
-                arrange.setDeputyNum(arrange.getDeputyNum() + voteNum);
-            }
-            if (voteType.equals("C")) {
-                arrange.setVoteC(arrange.getVoteC() + voteNum);
-            }
-
-            arrange.setVoteNum(arrange.getVoteNum() + voteNum);
-
-        } else {
-            AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
-            LambdaQueryWrapper<AssessReportEvaluationSummary> lqw2 = new LambdaQueryWrapper<>();
-            lqw2.eq(AssessReportEvaluationSummary::getDepart, depart);
-            lqw2.eq(AssessReportEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
-            List<AssessReportEvaluationSummary> summaries = reportEvaluationSummaryMapper.selectList(lqw2);
-            if (summaries != null && !summaries.isEmpty()) {
-                for (AssessReportEvaluationSummary summary : summaries) {
-                    summary.setNum(summary.getNum() + voteNum);
-                    reportEvaluationSummaryMapper.updateById(summary);
-                }
-            }
-
-        }
+        // 更新票数统计
+        updateVoteCounts(assess, depart, voteType, voteNum, currentAssessInfo);
 
         return insertUsers;
+    }
+
+    // 辅助方法1：获取已存在的用户名
+    private Set<String> getExistingUsernames() {
+        LambdaQueryWrapper<SysUser> lqw = new LambdaQueryWrapper<>();
+        lqw.isNotNull(SysUser::getPwdPlainText)
+                .select(SysUser::getUsername);
+        return sysUserService.list(lqw).stream()
+                .map(SysUser::getUsername)
+                .collect(Collectors.toSet());
+    }
+
+    // 辅助方法2：处理局机关投票类型
+    private void handleBureauVoteType(String assess, String depart, String voteType, int voteNum,
+                                      Set<String> userNames, List<SysUser> insertUsers,
+                                      List<SysUserRole> insertUserRoles, List<SysUserDepart> insertUserDeparts) {
+        switch (voteType) {
+            case "B":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "bureau_B", this::getBureauDepartIds);
+                break;
+            case "C":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "bureau_C", user -> depart);
+                break;
+        }
+    }
+
+    // 辅助方法3：处理基层投票类型
+    private void handleBasicVoteType(String assess, String depart, String voteType, int voteNum,
+                                     Set<String> userNames, List<SysUser> insertUsers,
+                                     List<SysUserRole> insertUserRoles, List<SysUserDepart> insertUserDeparts) {
+        switch (voteType) {
+            case "A":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "basic_AB", user -> depart);
+                break;
+            case "B":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "basic_B", user -> depart);
+                break;
+            case "C":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "basic_C", user -> depart);
+                break;
+        }
+    }
+
+    // 辅助方法4：处理其他投票类型
+    private void handleOtherVoteType(String assess, String depart, String voteType, int voteNum,
+                                     Set<String> userNames, List<SysUser> insertUsers,
+                                     List<SysUserRole> insertUserRoles, List<SysUserDepart> insertUserDeparts) {
+        switch (voteType) {
+            case "A":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "A", user -> depart);
+                break;
+            case "B":
+                createAnonymousUsers(assess, depart, voteNum, userNames, insertUsers, insertUserRoles, insertUserDeparts,
+                        "B", user -> depart);
+                break;
+        }
+    }
+
+    // 辅助方法5：创建匿名用户
+    private void createAnonymousUsers(String assess, String depart, int voteNum,
+                                      Set<String> userNames, List<SysUser> insertUsers,
+                                      List<SysUserRole> insertUserRoles, List<SysUserDepart> insertUserDeparts,
+                                      String voteType, Function<SysUser, String> departIdsProvider) {
+
+        for (int i = 0; i < voteNum; i++) {
+            SysUser user = createBaseUser(userNames);
+            user.setDepart(depart);
+            user.setDepartIds(departIdsProvider.apply(user));
+            user.setVoteType(voteType);
+            user.setAssess(assess);
+
+            SysUser sysUser = addAnonymousUser(user);
+            insertUsers.add(sysUser);
+
+            // 添加用户角色关联
+            insertUserRoles.add(createUserRole(sysUser.getId()));
+
+            // 添加用户部门关联
+            insertUserDeparts.add(createUserDepart(sysUser.getId(), depart));
+        }
+    }
+
+    // 辅助方法6：获取局机关部门ID
+    private String getBureauDepartIds(SysUser user) {
+        List<AssessLeaderDepartConfig> leaderDepartConfigs = leaderDepartConfigMapper.selectList(null);
+        if (leaderDepartConfigs == null) {
+            return user.getDepart();
+        }
+
+        for (AssessLeaderDepartConfig config : leaderDepartConfigs) {
+            if (config.getDepartId().contains(user.getDepart())) {
+                List<String> departList = Arrays.asList(config.getDepartId().split(","));
+                List<SysDepartModel> allDepart = departCommonApi.queryDepartByType(new String[]{"1"});
+
+                List<String> validDepartIds = departList.stream()
+                        .filter(departId -> allDepart.stream().anyMatch(d -> d.getId().equals(departId)))
+                        .collect(Collectors.toList());
+
+                String departIds = String.join(",", validDepartIds);
+                return this.hasChiefEngineer(config) ? departIds + ",JG" : departIds;
+            }
+        }
+        return user.getDepart();
+    }
+
+    // 辅助方法7：创建基础用户
+    private SysUser createBaseUser(Set<String> userNames) {
+        SysUser user = new SysUser();
+        user.setId(IdWorker.getIdStr());
+
+        // 生成唯一用户名
+        String username;
+        do {
+            username = CommonUtils.randomString(6);
+        } while (userNames.contains(username));
+
+        userNames.add(username);
+        user.setUsername(username);
+        return user;
+    }
+
+    // 辅助方法8：创建用户角色关联
+    private SysUserRole createUserRole(String userId) {
+        SysUserRole userRole = new SysUserRole();
+        userRole.setUserId(userId);
+        userRole.setRoleId(TEMP_ROLE_ID);
+        return userRole;
+    }
+
+    // 辅助方法9：创建用户部门关联
+    private SysUserDepart createUserDepart(String userId, String departId) {
+        return new SysUserDepart(userId, departId);
+    }
+
+    // 辅助方法10：批量插入数据
+    private void batchInsertData(List<SysUser> users, List<SysUserRole> userRoles, List<SysUserDepart> userDeparts) {
+        if (users.isEmpty()) return;
+
+        try (SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false)) {
+            SysUserMapper userMapper = sqlSession.getMapper(SysUserMapper.class);
+            SysUserRoleMapper roleMapper = sqlSession.getMapper(SysUserRoleMapper.class);
+            SysUserDepartMapper departMapper = sqlSession.getMapper(SysUserDepartMapper.class);
+
+            users.forEach(userMapper::insert);
+            userRoles.forEach(roleMapper::insert);
+            userDeparts.forEach(departMapper::insert);
+
+            sqlSession.commit();
+        }
+    }
+
+    // 辅助方法11：更新票数统计
+    private void updateVoteCounts(String assess, String depart, String voteType, int voteNum,
+                                  AssessCurrentAssess currentAssessInfo) {
+        if ("annual".equals(assess)) {
+            updateAnnualVoteCounts(depart, voteType, voteNum, currentAssessInfo);
+        } else {
+            updateOtherVoteCounts(depart, voteType, voteNum, currentAssessInfo);
+        }
+    }
+
+    // 辅助方法12：更新年度考核票数
+    private void updateAnnualVoteCounts(String depart, String voteType, int voteNum,
+                                        AssessCurrentAssess currentAssessInfo) {
+        // 更新民主评价汇总
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getDepart, depart)
+                .eq(AssessDemocraticEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
+
+        List<AssessDemocraticEvaluationSummary> summaries = democraticEvaluationSummaryMapper.selectList(lqw);
+        if (summaries != null && !summaries.isEmpty()) {
+            summaries.forEach(summary -> {
+                summary.setNum(summary.getNum() + voteNum);
+                democraticEvaluationSummaryMapper.updateById(summary);
+            });
+        }
+
+        // 更新年度安排
+        LambdaQueryWrapper<AssessAnnualFill> fillQuery = new LambdaQueryWrapper<>();
+        fillQuery.eq(AssessAnnualFill::getDepart, depart)
+                .eq(AssessAnnualFill::getCurrentYear, currentAssessInfo.getCurrentYear());
+
+        AssessAnnualFill fill = annualFillMapper.selectOne(fillQuery);
+        if (fill == null) return;
+
+        LambdaQueryWrapper<AssessAnnualArrange> arrangeQuery = new LambdaQueryWrapper<>();
+        arrangeQuery.eq(AssessAnnualArrange::getAnnualFillId, fill.getId());
+        AssessAnnualArrange arrange = annualArrangeMapper.selectOne(arrangeQuery);
+        if (arrange == null) return;
+
+        switch (voteType) {
+            case "A":
+                arrange.setVoteA(arrange.getVoteA() + voteNum);
+                arrange.setChiefNum(arrange.getChiefNum() + voteNum);
+                break;
+            case "B":
+                arrange.setVoteB(arrange.getVoteB() + voteNum);
+                arrange.setDeputyNum(arrange.getDeputyNum() + voteNum);
+                break;
+            case "C":
+                arrange.setVoteC(arrange.getVoteC() + voteNum);
+                break;
+        }
+
+        arrange.setVoteNum(arrange.getVoteNum() + voteNum);
+        annualArrangeMapper.updateById(arrange);
+    }
+
+    // 辅助方法13：更新其他考核票数
+    private void updateOtherVoteCounts(String depart, String voteType, int voteNum,
+                                       AssessCurrentAssess currentAssessInfo) {
+        LambdaQueryWrapper<AssessReportEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessReportEvaluationSummary::getDepart, depart)
+                .eq(AssessReportEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
+
+        List<AssessReportEvaluationSummary> summaries = reportEvaluationSummaryMapper.selectList(lqw);
+        if (summaries != null && !summaries.isEmpty()) {
+            summaries.forEach(summary -> {
+                summary.setNum(summary.getNum() + voteNum);
+                reportEvaluationSummaryMapper.updateById(summary);
+            });
+        }
     }
 
     @Override
     public List<SysUser> getAllLeader() {
         return userCommonMapper.getAllLeaders();
+    }
+
+    @Override
+    public List<SysUser> getHistoryAssessUnit(String year) {
+        LambdaQueryWrapper<LeaderDepartHistory> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(LeaderDepartHistory::getAssessYear, year);
+        List<LeaderDepartHistory> all = ldHistoryMapper.selectList(lqw);
+        List<SysUser> users = new ArrayList<>();
+        if (all != null && !all.isEmpty()) {
+            for (LeaderDepartHistory h : all) {
+                SysUser user = new SysUser();
+                user.setId(h.getLeaderId());
+                user.setRealname(h.getRealname());
+                user.setUsername(h.getUsername());
+                users.add(user);
+            }
+        }
+
+//        return userCommonMapper.getHistoryAssessUnit(year);
+        return users;
     }
 
     @Override

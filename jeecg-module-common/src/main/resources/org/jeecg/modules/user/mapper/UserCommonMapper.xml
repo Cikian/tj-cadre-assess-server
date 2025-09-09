@@ -21,4 +21,10 @@
         from sys_user
                  inner join assess_leader_depart_config on sys_user.id = assess_leader_depart_config.leader_id
     </select>
+    <select id="getHistoryAssessUnit" resultType="org.jeecg.modules.system.entity.SysUser">
+        select sys_user.*
+        from sys_user
+                 inner join leader_depart_history on sys_user.id = leader_depart_history.leader_id
+        where leader_depart_history.assess_year = #{year}
+    </select>
 </mapper>

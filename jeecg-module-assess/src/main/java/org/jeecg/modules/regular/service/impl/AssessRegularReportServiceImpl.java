@@ -216,6 +216,12 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
      */
     @Override
     public void startProcess(RegularStartVO regularStartVO, Set<String> uniqueDepartmentCodes) {
+        if (!"1".equals(regularStartVO.getCurrentQuarter())){
+            // 如果不是第一季度，判断是否有人离退休，如果有，将其delFlag设置为1
+            assessRegularReportItemService.deleteRetiree(regularStartVO.getCurrentYear(), regularStartVO.getReportItems());
+        }
+
+
         // 处理每个不同的处室信息
         for (String departmentCode : uniqueDepartmentCodes) {
             // 是否为本年季度更新
@@ -228,6 +234,8 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
             }
         }
     }
+
+
 
     /**
      * 判断流程是否已经启动

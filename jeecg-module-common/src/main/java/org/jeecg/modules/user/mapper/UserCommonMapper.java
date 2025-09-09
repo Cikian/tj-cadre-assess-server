@@ -10,4 +10,6 @@ public interface UserCommonMapper {
     Integer getTotalPeopleNum();
 
     List<SysUser> getAllLeaders();
+
+    List<SysUser> getHistoryAssessUnit(String year);
 }

@@ -1,8 +1,12 @@
 package org.jeecg.modules.regular.service;
 
+import com.alibaba.fastjson.JSONObject;
 import org.jeecg.modules.depart.dto.DepartLeadersRegularGradeDTO;
 import org.jeecg.modules.regular.entity.AssessRegularReportItem;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.jeecg.modules.sys.entity.AssessCurrentAssess;
+import org.jeecg.modules.system.entity.SysUser;
+
 import java.util.List;
 
 /**
@@ -49,5 +53,10 @@ public interface IAssessRegularReportItemService extends IService<AssessRegularR
 	 */
 	List<DepartLeadersRegularGradeDTO> queryDepartLeadersRegularGrade(String departId, String year);
 
+	void resetStatus(String year);
+
+	JSONObject getAssessingStatus(SysUser user, List<AssessCurrentAssess> assessingList, JSONObject res);
+
+	void deleteRetiree(String currentYear, List<AssessRegularReportItem> reportItems);
 
 }

@@ -224,6 +224,7 @@ public interface ISysUserService extends IService<SysUser> {
 	Result checkUserIsEffective(SysUser sysUser);
 
 	SysUser checkOaUser(String OAUserId);
+	SysUser getOaUser(String OAUserId);
 
 
 

@@ -1,6 +1,8 @@
 package org.jeecg.modules.regular.service.impl;
 
+import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.apache.ibatis.session.ExecutorType;
@@ -14,8 +16,12 @@ import org.jeecg.modules.regular.mapper.AssessRegularReportItemMapper;
 import org.jeecg.modules.regular.mapper.AssessRegularReportMapper;
 import org.jeecg.modules.regular.service.IAssessRegularMergeDepartService;
 import org.jeecg.modules.regular.service.IAssessRegularReportItemService;
+import org.jeecg.modules.sys.AssessCommonApi;
+import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.annual.AssessAnnualSummary;
+import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.sys.mapper.annual.AssessAnnualSummaryMapper;
+import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.utils.CommonUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,6 +54,8 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
 
     @Autowired
     private IAssessRegularMergeDepartService assessRegularMergeDepartService;
+    @Autowired
+    private AssessCommonApi assessCommonApi;
 
     @Override
     public List<AssessRegularReportItem> selectByMainId(String mainId) {
@@ -246,6 +254,14 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
         return regularGradeDTOS;
     }
 
+    @Override
+    public void resetStatus(String year) {
+        LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
+        luw.eq(AssessRegularReportItem::getCurrentYear, year);
+        luw.set(AssessRegularReportItem::getStatus, "1");
+        assessRegularReportItemMapper.update(null, luw);
+    }
+
     private List<AssessRegularReportItem> getOtherMergeDepartData(AssessRegularReport assessRegularReport){
         LambdaQueryWrapper<AssessRegularMergeDepart> lambdaQueryWrapper=new LambdaQueryWrapper<>();
         lambdaQueryWrapper.eq(AssessRegularMergeDepart::getReportDepart,"N");
@@ -266,5 +282,63 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
         }
         return result;
     }
+
+    @Override
+    public JSONObject getAssessingStatus(SysUser user, List<AssessCurrentAssess> assessingList, JSONObject res) {
+        int count = 0;
+        boolean assessing = false;
+
+        String userId = user.getId();
+
+        // 获取领导分管处室配置
+        AssessLeaderDepartConfig config = assessCommonApi.getAssessUnitByLeader(userId);
+        if (config != null) {
+            List<String> departIds = Arrays.asList(config.getDepartId().split(","));
+
+            for (AssessCurrentAssess assess : assessingList) {
+                if ("regular".equals(assess.getAssess())) {
+                    LambdaQueryWrapper<AssessRegularReportItem> lqw = new LambdaQueryWrapper<>();
+                    lqw.eq(AssessRegularReportItem::getCurrentYear, assess.getCurrentYear());
+                    lqw.eq(AssessRegularReportItem::getStatus, "1");
+                    lqw.eq(AssessRegularReportItem::getIsLeader, "1");
+                    lqw.in(AssessRegularReportItem::getDepartmentCode, departIds);
+                    List<AssessRegularReportItem> items = assessRegularReportItemMapper.selectList(lqw);
+                    if (items != null && !items.isEmpty()) {
+                        count++;
+                        assessing = true;
+                    }
+                }
+            }
+        }
+
+        res.put("status", assessing);
+        res.put("count", count);
+
+        return res;
+    }
+
+    public void deleteRetiree(String currentYear, List<AssessRegularReportItem> reportItems) {
+        // 1. 查询当前年份所有记录
+        LambdaQueryWrapper<AssessRegularReportItem> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessRegularReportItem::getCurrentYear, currentYear);
+        List<AssessRegularReportItem> allItems = assessRegularReportItemMapper.selectList(lqw);
+
+        // 2. 构建需保留的记录的联合键集合（内存去重）
+        Set<String> keepKeys = reportItems.stream()
+                .map(item -> CommonUtils.hashId(item.getName(), item.getSex() == 1 ? "男" : "女", item.getBirthDate()))
+                .collect(Collectors.toSet());
+
+        // 3. 筛选需要删除的ID（利用HashSet O(1)查找）
+        List<String> idsToDelete = allItems.stream()
+                .filter(item -> !keepKeys.contains(CommonUtils.hashId(item.getName(), item.getSex() == 1 ? "男" : "女", item.getBirthDate())))
+                .map(AssessRegularReportItem::getId)
+                .collect(Collectors.toList());
+
+        LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
+        luw.in(AssessRegularReportItem::getId, idsToDelete);
+        luw.set(AssessRegularReportItem::getDelFlag, 1);
+        assessRegularReportItemMapper.update(null, luw);
+    }
+
 
 }

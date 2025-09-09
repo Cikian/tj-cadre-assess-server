@@ -25,6 +25,7 @@ import org.jeecg.modules.annual.dto.RecommendTempDTO;
 import org.jeecg.modules.annual.entity.FinalRecord;
 import org.jeecg.modules.annual.service.IAssessAnnualFillService;
 import org.jeecg.modules.annual.service.IAssessAnnualSummaryService;
+import org.jeecg.modules.annual.service.ILeaderDepartHistoryService;
 import org.jeecg.modules.annual.vo.*;
 import org.jeecg.modules.business.service.IAssessLeaderDepartConfigService;
 import org.jeecg.modules.depart.DepartCommonApi;
@@ -79,6 +80,8 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
     private UserCommonApi userCommonApi;
     @Autowired
     private IAssessLeaderDepartConfigService leaderDepartConfigService;
+    @Autowired
+    private ILeaderDepartHistoryService ldHistoryService;
 
 
     /**
@@ -102,34 +105,43 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
 
         QueryWrapper<AssessAnnualSummary> queryWrapper = QueryGenerator.initQueryWrapper(assessAnnualSummary, parameterMap);
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-        if (parameterMap.get("currentYear") == null) {
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
-                queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
-            }
+
+        // 获取assessYear，优先从请求参数，否则从当前评估信息中获取
+        String assessYear = Optional.ofNullable(parameterMap.get("currentYear"))
+                .filter(years -> years.length > 0)
+                .map(years -> years[0])
+                .orElseGet(() -> Optional.ofNullable(currentAssessInfo).map(AssessCurrentAssess::getCurrentYear).orElse(null));
+
+        // 如果assessYear不为null，则添加条件
+        if (assessYear != null) {
+            queryWrapper.eq("current_year", assessYear);
         }
 
-        if (parameterMap.get("leader") != null) {
-            String[] leaders = parameterMap.get("leader");
-            if (leaders.length > 0) {
-                String leader = leaders[0];
-                List<String> departsIds = leaderDepartConfigService.getDepartIdsByLeaderIds(Arrays.asList(leader.split(",")));
-                queryWrapper.in("depart", departsIds);
+        // 处理leader参数
+        String[] leaders = parameterMap.get("leader");
+        if (leaders != null && leaders.length > 0) {
+            String leader = leaders[0];
+            List<String> departsIds = ldHistoryService.getDepartIdsByLeaderIds(Arrays.asList(leader.split(",")), assessYear);
+            if (departsIds.isEmpty()) {
+                departsIds = leaderDepartConfigService.getDepartIdsByLeaderIds(Arrays.asList(leader.split(",")));
             }
+            queryWrapper.in("depart", departsIds);
         }
 
-        if (parameterMap.get("departType") != null) {
-            String s = parameterMap.get("departType")[0];
+        // 处理departType参数
+        String[] departTypes = parameterMap.get("departType");
+        if (departTypes != null && departTypes.length > 0) {
+            String s = departTypes[0];
             List<String> list = Arrays.asList(s.split(","));
             queryWrapper.in("depart_type", list);
         }
 
-
+        // 根据summaryType处理type条件
         if ("group".equals(summaryType)) {
             queryWrapper.eq("type", summaryType);
         } else {
             queryWrapper.ne("type", "group");
         }
-
 
         queryWrapper.orderByAsc("person_order + 0");
 
@@ -137,7 +149,7 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
         IPage<AssessAnnualSummary> pageList = summaryService.page(page, queryWrapper);
 
         if ("group".equals(summaryType)) {
-            List<AnnualGroupSummaryVO> summary = summaryService.getGroupSummaryInfo(pageList.getRecords(), currentAssessInfo.getCurrentYear());
+            List<AnnualGroupSummaryVO> summary = summaryService.getGroupSummaryInfo(pageList.getRecords(), assessYear);
             IPage<AnnualGroupSummaryVO> pageGroup = new Page<>();
             pageGroup.setRecords(summary);
             pageGroup.setTotal(pageList.getTotal());
@@ -146,7 +158,6 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
             pageGroup.setPages(pageList.getPages());
             return Result.OK(pageGroup);
         }
-
 
         return Result.OK(pageList);
     }
@@ -944,7 +955,11 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
         }
 
         Map<String, String> currentUserDepart = departCommonApi.getCurrentUserDepart();
+        if (currentUserDepart == null) {
+            throw new JeecgBootException("当前用户无法下载，请使用填报专员账号或负责人账号下载！");
+        }
         String departId = currentUserDepart.get("departId");
+
 
         JSONObject queryParam = new JSONObject();
         queryParam.put("year", year);

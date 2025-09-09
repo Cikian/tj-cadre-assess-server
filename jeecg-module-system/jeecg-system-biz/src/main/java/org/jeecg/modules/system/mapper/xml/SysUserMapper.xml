@@ -23,7 +23,6 @@
 		</foreach>
 	</select>
 
-	<!-- 查询用户的所属部门简称信息 -->
 	<select id="getDepAliasByUserIds" resultType="org.jeecg.modules.system.vo.SysUserAliasVo">
 		select d.alias,ud.user_id from sys_user_depart ud,sys_depart d where d.id = ud.dep_id and ud.user_id in
 		<foreach collection="userIds" index="index" item="id" open="(" separator="," close=")">

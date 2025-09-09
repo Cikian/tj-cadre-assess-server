@@ -234,7 +234,7 @@ public class AssessReportNewLeaderController extends JeecgController<AssessRepor
     @GetMapping("/getNewLeaderbyYear")
     public JSONObject getNewLeaderbyYear(@RequestParam(name = "currentYear",defaultValue = "0") String currentYear, HttpServletRequest request, HttpServletResponse response) {
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
-        if (currentAssessInfo == null || !currentAssessInfo.isAssessing()) return null;
+        if (currentAssessInfo == null) return null;
         if ("0".equals(currentYear)) {
             currentYear = currentAssessInfo.getCurrentYear();
         }

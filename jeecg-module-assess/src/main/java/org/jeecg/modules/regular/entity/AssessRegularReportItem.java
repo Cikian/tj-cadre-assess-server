@@ -1,9 +1,6 @@
 package org.jeecg.modules.regular.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -193,4 +190,10 @@ public class AssessRegularReportItem implements Serializable {
     private String departmentCodeAlias;
 
     private String status;
+
+    /**
+     * 删除状态（0，正常，1已删除）
+     */
+    @Excel(name = "删除状态", width = 15, dicCode = "del_flag")
+    private Integer delFlag;
 }

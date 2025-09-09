@@ -31,56 +31,61 @@ import java.util.Date;
 public class AssessAnnualNegativeList implements Serializable {
     private static final long serialVersionUID = 1L;
 
-	/**主键*/
-	@TableId(type = IdType.ASSIGN_ID)
+    /**主键*/
+    @TableId(type = IdType.ASSIGN_ID)
     @ApiModelProperty(value = "主键")
     private String id;
-	/**创建人*/
+    /**创建人*/
     @ApiModelProperty(value = "创建人")
     private String createBy;
-	/**创建日期*/
-	@JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
+    /**创建日期*/
+    @JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
     @DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss")
     @ApiModelProperty(value = "创建日期")
     private Date createTime;
-	/**更新人*/
+    /**更新人*/
     @ApiModelProperty(value = "更新人")
     private String updateBy;
-	/**更新日期*/
-	@JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
+    /**更新日期*/
+    @JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
     @DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss")
     @ApiModelProperty(value = "更新日期")
     private Date updateTime;
 
-	/**单位*/
-	@Excel(name = "单位", width = 15)
+    /**单位*/
+    @Excel(name = "单位", width = 20, dictTable = "sys_depart", dicText = "alias", dicCode = "id")
     @Dict(dictTable = "sys_depart", dicText = "alias", dicCode = "id")
     @ApiModelProperty(value = "单位")
     private String depart;
+
+    /**年度*/
+    @Excel(name = "年度", width = 10)
+    @ApiModelProperty(value = "年度")
+    private String currentYear;
+
     private String person;
     private String hashId;
-	/**内容*/
-	@Excel(name = "内容", width = 15)
-    @ApiModelProperty(value = "内容")
-    private String content;
-	/**填写单位*/
-	@Excel(name = "填写单位", width = 15)
+
+    /**填写单位*/
+    @Excel(name = "填写单位", width = 20, dictTable = "sys_depart", dicText = "alias", dicCode = "id")
     @ApiModelProperty(value = "填写单位")
     @Dict(dictTable = "sys_depart", dicText = "alias", dicCode = "id")
     private String reportDepart;
-	/**证明文件*/
-	@Excel(name = "证明文件", width = 15)
+
+    /**内容*/
+    @Excel(name = "内容", width = 80)
+    @ApiModelProperty(value = "内容")
+    private String content;
+
+    /**证明文件*/
     @ApiModelProperty(value = "证明文件")
     private String files;
-	/**状态*/
-	@Excel(name = "状态", width = 15)
+    /**状态*/
+    @Excel(name = "状态", width = 15, dicCode = "adopt_status")
     @ApiModelProperty(value = "状态")
-    @Dict(dicCode = "report_status")
+    @Dict(dicCode = "adopt_status")
     private String status;
-	/**年度*/
-	@Excel(name = "年度", width = 15)
-    @ApiModelProperty(value = "年度")
-    private String currentYear;
+
     private String type;
 
     private String reportBy;
