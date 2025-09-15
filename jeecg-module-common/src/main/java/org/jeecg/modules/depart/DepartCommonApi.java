@@ -111,4 +111,6 @@ public interface DepartCommonApi extends ISysBaseAPI {
 
     Map<String, String> getId2NameMap();
 
+    String getDepartNameById(String id);
+
 }

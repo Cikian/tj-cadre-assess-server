@@ -12,9 +12,7 @@ import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
 import org.apache.batik.transcoder.image.PNGTranscoder;
 import org.apache.commons.lang.StringUtils;
-import org.apache.poi.*;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.shiro.SecurityUtils;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.aspect.annotation.AutoLog;
@@ -37,7 +35,6 @@ import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.annual.AssessDemocraticEvaluation;
 import org.jeecg.modules.sys.entity.annual.AssessDemocraticEvaluationSummary;
 import org.jeecg.modules.sys.entity.annual.AssessTrialPeople;
-import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.sys.mapper.business.AssessLeaderDepartConfigMapper;
 import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.user.UserCommonApi;
@@ -63,7 +60,10 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -100,6 +100,7 @@ public class AssessDemocraticEvaluationSummaryController {
     private IAssessTrialPeopleService trialService;
     @Value("${jeecg.path.upload}")
     private String uploadPath;
+
     /**
      * 分页列表查询
      *
@@ -112,12 +113,22 @@ public class AssessDemocraticEvaluationSummaryController {
     @GetMapping(value = "/list")
     public Result<IPage<AssessDemocraticEvaluationSummary>> queryPageList(
             AssessDemocraticEvaluationSummary assessDemocraticEvaluationSummary,
+            String year,
             HttpServletRequest req) {
 
         QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = new QueryWrapper<>();
-        Map<String, String[]> parameterMap = req.getParameterMap();
+        Map<String, String[]> parameter = req.getParameterMap();
+        Map<String, String[]> parameterMap = new HashMap<>();
+
+        parameter.forEach((key, value) -> {
+            if (!(value.length == 1 && value[0].isEmpty())) {
+                parameterMap.put(key, value);
+            }
+        });
+
         // 1. 提取currentYear处理逻辑
-        handleCurrentYearCondition(queryWrapper, parameterMap);
+        if (year != null) queryWrapper.eq("current_year", year);
+        else handleCurrentYearCondition(queryWrapper, parameterMap);
         // 2. 提取type条件处理
         handleTypeCondition(queryWrapper, parameterMap);
         // 3. 提取departType条件处理
@@ -196,33 +207,35 @@ public class AssessDemocraticEvaluationSummaryController {
     private List<AssessDemocraticEvaluationSummary> handleLeaderCondition(
             QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper,
             Map<String, String[]> parameterMap) {
-
         List<AssessDemocraticEvaluationSummary> jgList = new ArrayList<>();
+
         if (!parameterMap.containsKey("leader")) {
             return jgList;
         }
 
         String leader = parameterMap.get("leader")[0];
-        // 优化：直接获取部门ID列表
-        List<String> departIds = getLeaderDepartIds(leader);
-        if (!departIds.isEmpty()) {
-            queryWrapper.in("depart", departIds);
+        String year = null;
+        if (parameterMap.containsKey("currentYear")) {
+            year = parameterMap.get("currentYear")[0];
         }
+
+        // 优化：直接获取部门ID列表
+        List<String> departIds = userCommonApi.getHistoryUnitDeptIds(Collections.singletonList(leader), year);
+        queryWrapper.in("depart", departIds);
+        if (parameterMap.containsKey("departType")) {
+
+        }
+        if ((parameterMap.containsKey("type") && !"z".equals(parameterMap.get("type")[0]))
+                || (parameterMap.containsKey("departType") && !"bureau".equals(parameterMap.get("departType")[0]))) {
+            return jgList;
+        }
+
 
         // 优化：避免重复逻辑
         if (shouldFetchJGList(parameterMap)) {
             jgList = fetchJGList(parameterMap, departIds);
         }
         return jgList;
-    }
-
-    // 子方法：获取领导管辖部门ID
-    private List<String> getLeaderDepartIds(String leaderId) {
-        LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-        qw.eq(AssessLeaderDepartConfig::getLeaderId, leaderId);
-        return deaderDepartConfigMapper.selectList(qw).stream()
-                .map(AssessLeaderDepartConfig::getDepartId)
-                .collect(Collectors.toList());
     }
 
     // 子方法：判断是否需要获取JG列表
@@ -257,109 +270,229 @@ public class AssessDemocraticEvaluationSummaryController {
                 .collect(Collectors.toList());
     }
 
-    @GetMapping(value = "/listPro")
-    public Result<IPage<AssessDemocraticEvaluationSummary>> queryPageList4Pro(AssessDemocraticEvaluationSummary params,
-                                                                              HttpServletRequest req) {
-        // QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = QueryGenerator.initQueryWrapper(assessDemocraticEvaluationSummary, req.getParameterMap());
-        QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = new QueryWrapper<>();
-        Map<String, String[]> parameterMap = req.getParameterMap();
+    @GetMapping("/listPro2Excel")
+    public JSONObject queryPageList4Pro2Excel(AssessDemocraticEvaluationSummary params,
+                                              @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+                                              @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear,
+                                              HttpServletRequest req) {
+        if ("0".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
 
-        AssessCurrentAssess currentAssessInfo = null;
-        if (parameterMap.get("currentYear") == null) {
-            currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
-                queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
-            }
-        } else {
-            queryWrapper.eq("current_year", parameterMap.get("currentYear")[0]);
+        if ("0".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
+
+        Map<String, String[]> parameterMap = req.getParameterMap();
+        String desc4Excel = getDesc4Excel(parameterMap);
+
+        Result<IPage<AssessDemocraticEvaluationSummary>> iPageResult = this.queryPageList4Pro(params, endYear, req);
+        IPage<AssessDemocraticEvaluationSummary> result = iPageResult.getResult();
+        List<AssessDemocraticEvaluationSummary> data = result.getRecords();
+
+        List<JSONObject> resData = new ArrayList<>();
+
+        Map<String, String> id2NameMap = departCommonApi.getId2NameMap();
+
+        int i = 1;
+        for (AssessDemocraticEvaluationSummary item : data) {
+            JSONObject json = new JSONObject();
+            json.put("id", i);
+            json.put("name", CommonUtils.getNameByHashId(item.getAppraisee()));
+            json.put("depart", id2NameMap.get(item.getDepart()));
+            json.put("year", item.getCurrentYear());
+            json.put("score", item.getScore());
+            json.put("ranking", item.getRanking());
+            json.put("scopRamking", item.getScopeRanking());
+            json.put("currentYear", item.getCurrentYear());
+            json.put("desc", desc4Excel + "人员名单");
+            resData.add(json);
+            i++;
         }
 
 
-        Boolean trial = params.getTrial();
-        List<AssessDemocraticEvaluationSummary> jgList = new ArrayList<>();
+        JSONObject json = new JSONObject();
+        json.put("data", resData);
+        return json;
+    }
 
-        if (trial == null || !trial) {
-            if (parameterMap.get("type") != null) {
-                String type = parameterMap.get("type")[0];
-                if ("z".equals(type)) {
-                    queryWrapper.in("type", Arrays.asList("23", "22", "32"));
-                } else if ("f".equals(type)) {
-                    queryWrapper.in("type", Arrays.asList("21", "31"));
-                }
-            }
+    @PostMapping("/people2Excel")
+    public void exportPeopleExcel(@Value("${server.port}") String port,
+                                  @RequestBody JSONObject params,
+                                  HttpServletRequest request,
+                                  HttpServletResponse response) {
 
-            if (parameterMap.get("departType") != null) {
-                String departType = parameterMap.get("departType")[0];
-                if ("bureau".equals(departType)) {
-                    queryWrapper.eq("depart_type", "bureau");
-                } else {
-                    queryWrapper.ne("depart_type", "bureau");
-                }
-            }
+        String url = "http://localhost:" + port + "/jmreport/exportAllExcelStream" + "?token=" + TokenUtils.getTokenByRequest(request);
+        JSONObject queryParam = new JSONObject();
 
-            if (parameterMap.get("leader") != null) {
-                String leader = parameterMap.get("leader")[0];
-                LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-                qw.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-                List<AssessLeaderDepartConfig> leaderConfig = deaderDepartConfigMapper.selectList(qw);
-                StringBuilder ids = new StringBuilder();
-                for (AssessLeaderDepartConfig config : leaderConfig) {
-                    ids.append(config.getDepartId()).append(",");
-                }
-                // 去除最后逗号
-                if (ids.length() > 0) {
-                    ids.deleteCharAt(ids.length() - 1);
-                }
+        // 遍历params
+        for (String key : params.keySet()) {
+            queryParam.put(key, params.get(key));
+        }
 
-                // 转换为List
-                List<String> departIds = Arrays.asList(ids.toString().split(","));
+        Map<String, Object> param = new JSONObject();
+        param.put("excelConfigId", "1127476665576587264");
+        param.put("queryParam", queryParam);
+        String filename = this.getDesc4Excel(params) + ".xlsx";
+        assessCommonApi.getExportExcel(url, filename, param, response);
+    }
 
-                if (!departIds.isEmpty()) {
-                    queryWrapper.in("depart", departIds);
-                }
+    private String getDesc4Excel(Map<String, String[]> parameterMap) {
+        String desc = "";
 
-                if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
-                    LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
-                    if (parameterMap.get("currentYear") == null) {
-                        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
-                    } else {
-                        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, parameterMap.get("currentYear")[0]);
-                    }
-                    lqw.like(AssessDemocraticEvaluationSummary::getDepart, "JG");
-                    lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-                    jgList = democraticSummaryService.list(lqw);
-                    if (!jgList.isEmpty()) {
-                        Iterator<AssessDemocraticEvaluationSummary> iterator = jgList.iterator();
-                        while (iterator.hasNext()) {
-                            AssessDemocraticEvaluationSummary a = iterator.next();
-                            String depart = a.getDepart();
-                            String substring = depart.substring(2);
-                            if (!departIds.contains(substring)) {
-                                iterator.remove();
-                            }
-                        }
-                    }
-                }
-            }
+        String endYear = "";
+        String startYear = "";
+        if (!parameterMap.containsKey("endYear")
+                || parameterMap.get("endYear") == null
+                || "0".equals(parameterMap.get("endYear")[0])
+                || parameterMap.get("endYear")[0].isEmpty()
+                || "undefined".equals(parameterMap.get("endYear")[0])) {
+
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+
         } else {
+            endYear = parameterMap.get("endYear")[0];
+        }
+
+        if (!parameterMap.containsKey("startYear")
+                || parameterMap.get("startYear") == null
+                || "0".equals(parameterMap.get("startYear")[0])
+                || parameterMap.get("startYear")[0].isEmpty()
+                || "undefined".equals(parameterMap.get("startYear")[0])) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        } else {
+            startYear = parameterMap.get("startYear")[0];
+        }
+
+        desc += startYear + "-" + endYear + "年度";
+
+        if (parameterMap.containsKey("trial") && "true".equals(parameterMap.get("trial")[0])) {
+            desc += "试用期人员，";
+        } else {
+            if (parameterMap.containsKey("leader") && !parameterMap.get("leader")[0].isEmpty()) {
+                String leader = parameterMap.get("leader")[0];
+                List<LoginUser> userByIds = userCommonApi.getUserByIds(new String[]{leader});
+                if (userByIds != null && !userByIds.isEmpty()) {
+                    desc += userByIds.get(0).getRealname() + "考核单元内";
+                }
+            }
+
+            if (parameterMap.containsKey("departType") && !parameterMap.get("departType")[0].isEmpty()) {
+                String departType = parameterMap.get("departType")[0];
+                if ("bureau".equals(departType)) departType = "局机关处室";
+                else departType = "基层单位";
+                desc += departType;
+            }
+
+            if (parameterMap.containsKey("type") && !parameterMap.get("type")[0].isEmpty()) {
+                String type = parameterMap.get("type")[0];
+                if ("z".equals(type)) type = "正职";
+                else type = "副职";
+                desc += type;
+            }
+        }
+
+        if (parameterMap.containsKey("nums") && !parameterMap.get("nums")[0].isEmpty()) {
+            String nums = parameterMap.get("nums")[0];
+            desc += "后" + nums + "%";
+        }
+
+        return desc;
+    }
+
+    private String getDesc4Excel(JSONObject parameterMap) {
+        String desc = "";
+
+        String endYear = "";
+        String startYear = "";
+        if (!parameterMap.containsKey("endYear")
+                || parameterMap.get("endYear") == null
+                || "0".equals(parameterMap.get("endYear"))
+                || "undefined".equals(parameterMap.get("endYear"))) {
+
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+
+        } else {
+            endYear = parameterMap.getString("endYear");
+        }
+
+        if (!parameterMap.containsKey("startYear")
+                || parameterMap.get("startYear") == null
+                || "0".equals(parameterMap.get("startYear"))
+                || "undefined".equals(parameterMap.get("startYear"))) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        } else {
+            startYear = parameterMap.getString("startYear");
+        }
+
+        desc += startYear + "-" + endYear + "年度";
+
+        if (parameterMap.containsKey("trial") && parameterMap.getBoolean("trial")) {
+            desc += "试用期人员，";
+        } else {
+            if (parameterMap.containsKey("leader")) {
+                String leader = parameterMap.getString("leader");
+                List<LoginUser> userByIds = userCommonApi.getUserByIds(new String[]{leader});
+                if (userByIds != null && !userByIds.isEmpty()) {
+                    desc += userByIds.get(0).getRealname() + "考核单元内";
+                }
+            }
+
+            if (parameterMap.containsKey("departType")) {
+                String departType = parameterMap.getString("departType");
+                if ("bureau".equals(departType)) departType = "局机关处室";
+                else departType = "基层单位";
+                desc += departType;
+            }
+
+            if (parameterMap.containsKey("type")) {
+                String type = parameterMap.getString("type");
+                if ("z".equals(type)) type = "正职";
+                else type = "副职";
+                desc += type;
+            }
+        }
+
+        if (parameterMap.containsKey("nums")) {
+            String nums = parameterMap.getString("nums");
+            desc += "后" + nums + "%";
+        }
+
+        return desc;
+    }
+
+    @GetMapping(value = "/listPro")
+    public Result<IPage<AssessDemocraticEvaluationSummary>> queryPageList4Pro(AssessDemocraticEvaluationSummary params,
+                                                                              @RequestParam(name = "startYear", required = false, defaultValue = "0") String startYear,
+                                                                              HttpServletRequest req) {
+        List<AssessDemocraticEvaluationSummary> data = new ArrayList<>();
+
+        Boolean trial = params.getTrial();
+        if (Boolean.TRUE.equals(trial)) {
             List<AssessTrialPeople> trials = trialService.list();
             if (trials != null && !trials.isEmpty()) {
                 // 将hashId取出组合成List
+                LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
                 List<String> trialIds = trials.stream().map(AssessTrialPeople::getHashId).collect(Collectors.toList());
-                queryWrapper.in("appraisee", trialIds);
+                lqw.in(AssessDemocraticEvaluationSummary::getAppraisee, trialIds);
+                lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, startYear);
+                lqw.orderByAsc(AssessDemocraticEvaluationSummary::getRanking);
+                data = democraticSummaryService.list(lqw);
             }
-        }
-
-        queryWrapper.orderByAsc("ranking");
-
-        List<AssessDemocraticEvaluationSummary> data = democraticSummaryService.getData(queryWrapper);
-
-        if (!jgList.isEmpty()) {
-            data.addAll(jgList);
+        } else {
+            Result<IPage<AssessDemocraticEvaluationSummary>> iPageResult = this.queryPageList(params, "0".equals(startYear) ? null : startYear, req);
+            IPage<AssessDemocraticEvaluationSummary> result = iPageResult.getResult();
+            if (result != null) {
+                data = result.getRecords();
+            }
         }
 
         // 以ranking降序排序，如果是null，排在后面
         data.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getRanking, Comparator.nullsLast(Comparator.reverseOrder())));
+
 
         Integer nums = params.getNums();
         if (!Boolean.TRUE.equals(trial) && nums != null) {
@@ -379,6 +512,113 @@ public class AssessDemocraticEvaluationSummaryController {
         page.setRecords(data);
         return Result.OK(page);
     }
+
+//    @GetMapping(value = "/listPro")
+//    public Result<IPage<AssessDemocraticEvaluationSummary>> queryPageList4Pro(AssessDemocraticEvaluationSummary params,
+//                                                                              @RequestParam(name = "startYear", required = false, defaultValue = "0") String startYear,
+//                                                                              HttpServletRequest req) {
+//        // QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = QueryGenerator.initQueryWrapper(assessDemocraticEvaluationSummary, req.getParameterMap());
+//        QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = new QueryWrapper<>();
+//        Map<String, String[]> parameterMap = req.getParameterMap();
+//
+//        if ("0".equals(startYear) || startYear == null) {
+//            AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
+//            if (currentAssessInfo != null) {
+//                startYear = currentAssessInfo.getCurrentYear();
+//            }
+//        }
+//
+//        queryWrapper.eq("current_year", startYear);
+//
+//
+//        Boolean trial = params.getTrial();
+//        List<AssessDemocraticEvaluationSummary> jgList = new ArrayList<>();
+//
+//        if (trial == null || !trial) {
+//            if (parameterMap.get("type") != null) {
+//                String type = parameterMap.get("type")[0];
+//                if ("z".equals(type)) {
+//                    queryWrapper.in("type", Arrays.asList("23", "22", "32"));
+//                } else if ("f".equals(type)) {
+//                    queryWrapper.in("type", Arrays.asList("21", "31"));
+//                }
+//            }
+//
+//            if (parameterMap.get("departType") != null) {
+//                String departType = parameterMap.get("departType")[0];
+//                if ("bureau".equals(departType)) {
+//                    queryWrapper.eq("depart_type", "bureau");
+//                } else {
+//                    queryWrapper.ne("depart_type", "bureau");
+//                }
+//            }
+//
+//            if (parameterMap.get("leader") != null) {
+//                String leader = parameterMap.get("leader")[0];
+//                List<String> departIds = userCommonApi.getHistoryUnitDeptIds(Collections.singletonList(leader), startYear);
+//
+//                if (!departIds.isEmpty()) {
+//                    queryWrapper.in("depart", departIds);
+//                }
+//
+//                if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
+//                    LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+//                    lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, startYear);
+//                    lqw.like(AssessDemocraticEvaluationSummary::getDepart, "JG");
+//                    lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
+//                    jgList = democraticSummaryService.list(lqw);
+//
+//                    if (!jgList.isEmpty()) {
+//                        Iterator<AssessDemocraticEvaluationSummary> iterator = jgList.iterator();
+//                        while (iterator.hasNext()) {
+//                            AssessDemocraticEvaluationSummary a = iterator.next();
+//                            String depart = a.getDepart();
+//                            String substring = depart.substring(2);
+//                            if (!departIds.contains(substring)) {
+//                                iterator.remove();
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        } else {
+//            List<AssessTrialPeople> trials = trialService.list();
+//            if (trials != null && !trials.isEmpty()) {
+//                // 将hashId取出组合成List
+//                List<String> trialIds = trials.stream().map(AssessTrialPeople::getHashId).collect(Collectors.toList());
+//                queryWrapper.in("appraisee", trialIds);
+//            }
+//        }
+//
+//        queryWrapper.orderByAsc("ranking");
+//
+//        List<AssessDemocraticEvaluationSummary> data = democraticSummaryService.getData(queryWrapper);
+//
+//        if (!jgList.isEmpty()) {
+//            data.addAll(jgList);
+//        }
+//
+//        // 以ranking降序排序，如果是null，排在后面
+//        data.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getRanking, Comparator.nullsLast(Comparator.reverseOrder())));
+//
+//        Integer nums = params.getNums();
+//        if (!Boolean.TRUE.equals(trial) && nums != null) {
+//            // nums除以100，保留两位小数
+//            BigDecimal divide = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
+//            // data的size乘divide，向下取整
+//            int size = (int) (data.size() * divide.doubleValue());
+//            // 截取size个元素
+//            data = data.subList(0, size);
+//
+//        }
+//
+//        data.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getRanking, Comparator.nullsLast(Comparator.naturalOrder())));
+//
+//
+//        Page<AssessDemocraticEvaluationSummary> page = new Page<>();
+//        page.setRecords(data);
+//        return Result.OK(page);
+//    }
 
     /**
      * 添加
@@ -906,154 +1146,146 @@ public class AssessDemocraticEvaluationSummaryController {
      * @return
      */
     @GetMapping("/data1")
-    public Result<Map<String, Object>> getData1(AssessDemocraticEvaluationSummary params, HttpServletRequest req) {
+    public Result<Map<String, Object>> getData1(
+            AssessDemocraticEvaluationSummary params,
+            HttpServletRequest req,
+            @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+            @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear) {
 
-        // 获取当前年度
-        AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
-        String currentYear = info.getCurrentYear();
-        int currentYearInt = Integer.parseInt(currentYear);
-        int lastYearInt = currentYearInt - 1;
-        int last2YearInt = currentYearInt - 2;
+        if ("0".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
 
-        Map<String, Object> currentYearDataMap = getDataMap(params, req, currentYear);
-        Map<String, Object> lastYearDataMap = getDataMap(params, req, Integer.toString(lastYearInt));
-        Map<String, Object> last2YearDataMap = getDataMap(params, req, Integer.toString(last2YearInt));
+        if ("0".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
 
-        return getRes(currentYearDataMap,
-                lastYearDataMap,
-                last2YearDataMap,
-                currentYearInt,
-                lastYearInt,
-                last2YearInt,
-                params);
+        int startYearInt = Integer.parseInt(startYear);
+        int endYearInt = Integer.parseInt(endYear);
+
+        List<Map<String, Object>> dataMapList = new ArrayList<>();
+        for (int i = startYearInt; i <= endYearInt; i++) {
+            Map<String, Object> dataMap = getDataMap(params, req, String.valueOf(i));
+            dataMapList.add(dataMap);
+        }
+
+        return getRes(dataMapList, params);
     }
 
     @GetMapping("/data2")
-    public Result<Map<String, Object>> data2(AssessDemocraticEvaluationSummary params, HttpServletRequest req) {
-        // 获取当前年度
-        AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
-        String currentYear = info.getCurrentYear();
-        int currentYearInt = Integer.parseInt(currentYear);
-        int lastYearInt = currentYearInt - 1;
-        int last2YearInt = currentYearInt - 2;
+    public Result<Map<String, Object>> data2(AssessDemocraticEvaluationSummary params, HttpServletRequest req,
+                                             @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+                                             @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear) {
 
-        Map<String, Object> currentYearDataMap = getItem1DataMap(params, req, currentYear);
-        Map<String, Object> lastYearDataMap = getItem1DataMap(params, req, Integer.toString(lastYearInt));
-        Map<String, Object> last2YearDataMap = getItem1DataMap(params, req, Integer.toString(last2YearInt));
+        if ("0".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
 
-        return getRes(currentYearDataMap,
-                lastYearDataMap,
-                last2YearDataMap,
-                currentYearInt,
-                lastYearInt,
-                last2YearInt,
-                params);
+        if ("0".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
+
+        int startYearInt = Integer.parseInt(startYear);
+        int endYearInt = Integer.parseInt(endYear);
+
+        List<Map<String, Object>> dataMapList = new ArrayList<>();
+        for (int i = startYearInt; i <= endYearInt; i++) {
+            Map<String, Object> dataMap = getItem1DataMap(params, req, String.valueOf(i));
+            dataMapList.add(dataMap);
+        }
+
+        return getRes(dataMapList, params);
 
     }
 
     @GetMapping("/data3")
-    public Result<Map<String, Object>> data3(AssessDemocraticEvaluationSummary params, HttpServletRequest req) {
-        // 获取当前年度
-        AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
-        String currentYear = info.getCurrentYear();
-        int currentYearInt = Integer.parseInt(currentYear);
-        int lastYearInt = currentYearInt - 1;
-        int last2YearInt = currentYearInt - 2;
+    public Result<Map<String, Object>> data3(AssessDemocraticEvaluationSummary params, HttpServletRequest req,
+                                             @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+                                             @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear) {
+        if ("0".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
 
-        Map<String, Object> currentYearDataMap = getItem2DataMap(params, req, currentYear);
-        Map<String, Object> lastYearDataMap = getItem2DataMap(params, req, Integer.toString(lastYearInt));
-        Map<String, Object> last2YearDataMap = getItem2DataMap(params, req, Integer.toString(last2YearInt));
+        if ("0".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
 
-        return getRes(currentYearDataMap,
-                lastYearDataMap,
-                last2YearDataMap,
-                currentYearInt,
-                lastYearInt,
-                last2YearInt,
-                params);
+        int startYearInt = Integer.parseInt(startYear);
+        int endYearInt = Integer.parseInt(endYear);
+
+        List<Map<String, Object>> dataMapList = new ArrayList<>();
+        for (int i = startYearInt; i <= endYearInt; i++) {
+            Map<String, Object> dataMap = getItem2DataMap(params, req, String.valueOf(i));
+            dataMapList.add(dataMap);
+        }
+
+        return getRes(dataMapList, params);
 
     }
 
     @GetMapping("/data4")
-    public Result<Map<String, Object>> data4(AssessDemocraticEvaluationSummary params, HttpServletRequest req) {
-        // 获取当前年度
-        AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
-        String currentYear = info.getCurrentYear();
-        int currentYearInt = Integer.parseInt(currentYear);
-        int lastYearInt = currentYearInt - 1;
-        int last2YearInt = currentYearInt - 2;
+    public Result<Map<String, Object>> data4(AssessDemocraticEvaluationSummary params, HttpServletRequest req,
+                                             @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+                                             @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear) {
+        if ("0".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
 
-        Map<String, Object> currentYearDataMap = getItem3DataMap(params, req, currentYear);
-        Map<String, Object> lastYearDataMap = getItem3DataMap(params, req, Integer.toString(lastYearInt));
-        Map<String, Object> last2YearDataMap = getItem3DataMap(params, req, Integer.toString(last2YearInt));
+        if ("0".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
 
-        return getRes(currentYearDataMap,
-                lastYearDataMap,
-                last2YearDataMap,
-                currentYearInt,
-                lastYearInt,
-                last2YearInt,
-                params);
+        int startYearInt = Integer.parseInt(startYear);
+        int endYearInt = Integer.parseInt(endYear);
 
+        List<Map<String, Object>> dataMapList = new ArrayList<>();
+        for (int i = startYearInt; i <= endYearInt; i++) {
+            Map<String, Object> dataMap = getItem3DataMap(params, req, String.valueOf(i));
+            dataMapList.add(dataMap);
+        }
+
+        return getRes(dataMapList, params);
     }
 
-    private Result<Map<String, Object>> getRes(Map<String, Object> currentYearDataMap,
-                                               Map<String, Object> lastYearDataMap,
-                                               Map<String, Object> last2YearDataMap,
-                                               int currentYearInt,
-                                               int lastYearInt,
-                                               int last2YearInt,
-                                               AssessDemocraticEvaluationSummary params) {
+    private Result<Map<String, Object>> getRes(List<Map<String, Object>> dataMapList, AssessDemocraticEvaluationSummary params) {
+        Integer min = (Integer) dataMapList.get(0).get("data");
+        int markPointBottom = 9999;
+        int markPointTop = 0;
+        List<Integer> xAxisData = new ArrayList<>();
+        List<Integer> seriesData = new ArrayList<>();
+        for (Map<String, Object> dataMap : dataMapList) {
+            Integer data = (Integer) dataMap.get("data");
+            if (data < min) {
+                min = data;
+            }
+            Boolean underLine = (Boolean) dataMap.get("underLine");
+            if (underLine && data < markPointBottom) {
+                markPointBottom = data;
+            }
+            if (!underLine && data > markPointTop) {
+                markPointTop = data;
+            }
+            xAxisData.add(Integer.parseInt((String) dataMap.get("year")));
+            seriesData.add(data);
+        }
+
         Map<String, Object> resMap = new HashMap<>();
-        Integer data1 = (Integer) last2YearDataMap.get("data");
-        Boolean underline1 = (Boolean) last2YearDataMap.get("underLine");
-
-        Integer data2 = (Integer) lastYearDataMap.get("data");
-        Boolean underline2 = (Boolean) lastYearDataMap.get("underLine");
-
-        Integer data3 = (Integer) currentYearDataMap.get("data");
-        Boolean underline3 = (Boolean) currentYearDataMap.get("underLine");
-
-        // data1、2、3中找出最小的
-        Integer min = data1;
-        if (data2 < min) {
-            min = data2;
-        }
-        if (data3 < min) {
-            min = data3;
-        }
-
-        int over1 = 0;
-        int over2 = 0;
-        int over3 = 0;
-
-        int under1 = 9999;
-        int under2 = 9999;
-        int under3 = 9999;
-
-        if (underline1) under1 = data1;
-        else over1 = data1;
-
-        if (underline2) under2 = data2;
-        else over2 = data2;
-
-        if (underline3) under3 = data3;
-        else over3 = data3;
-
-        int markLineMin = Math.max(over1, Math.max(over2, over3));
-        int markLineMax = Math.min(under1, Math.min(under2, under3));
 
         int markLineData = 0;
 
-        if (markLineMin != markLineMax) {
-            markLineData = (markLineMax - markLineMin) / 2 + markLineMin;
+        if (markPointBottom != markPointTop) {
+            markLineData = (markPointBottom - markPointTop) / 2 + markPointTop;
         } else {
-            markLineData = markLineMin;
+            markLineData = markPointBottom;
         }
 
-        resMap.put("xAxisData", new Integer[]{last2YearInt, lastYearInt, currentYearInt});
+        resMap.put("xAxisData", xAxisData);
         resMap.put("yAxisMin", Math.max(min - 10, 0));
-        resMap.put("seriesData", new Integer[]{data1, data2, data3});
+        resMap.put("seriesData", seriesData);
         resMap.put("markLineData", markLineData);
         resMap.put("markLineName", params.getNums() != null ? params.getNums() + "%线" : "0");
 
@@ -1063,12 +1295,44 @@ public class AssessDemocraticEvaluationSummaryController {
 
     private Map<String, Object> getDataMap(AssessDemocraticEvaluationSummary params,
                                            HttpServletRequest req, String year) {
-        QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = new QueryWrapper<>();
+        // 1. 构建查询条件
+        QueryWrapper<AssessDemocraticEvaluationSummary> queryWrapper = buildQueryWrapper(req, year);
+
+        // 2. 获取领导配置数据
+        List<String> leaderDepartIds = getLeaderDepartIds(req, year);
+
+        // 3. 获取JG列表
+        List<AssessDemocraticEvaluationSummary> jgList = getJGList(req, year, leaderDepartIds,
+                y -> {
+                    LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+                    lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, y)
+                            .like(AssessDemocraticEvaluationSummary::getDepart, "JG")
+                            .isNotNull(AssessDemocraticEvaluationSummary::getScore);
+                    return democraticSummaryService.list(lqw);
+                },
+                // 部门提取函数
+                AssessDemocraticEvaluationSummary::getDepart
+        );
+
+        // 4. 执行主查询
+        List<AssessDemocraticEvaluationSummary> data = executeMainQuery(queryWrapper, jgList,
+                qw -> democraticSummaryService.getData(qw),
+                // 排名提取函数
+                AssessDemocraticEvaluationSummary::getRanking);
+
+        // 5. 处理结果
+        return processResult(params, data, req, year);
+    }
+
+    // 辅助方法1：构建查询条件
+    private <T> QueryWrapper<T> buildQueryWrapper(HttpServletRequest req, String year) {
+        QueryWrapper<T> queryWrapper = new QueryWrapper<>();
         Map<String, String[]> parameterMap = req.getParameterMap();
 
         queryWrapper.eq("current_year", year);
 
-        if (parameterMap.get("type") != null) {
+        // 处理type参数
+        if (parameterMap.containsKey("type")) {
             String type = parameterMap.get("type")[0];
             if ("z".equals(type)) {
                 queryWrapper.in("type", Arrays.asList("23", "22", "32"));
@@ -1077,7 +1341,8 @@ public class AssessDemocraticEvaluationSummaryController {
             }
         }
 
-        if (parameterMap.get("departType") != null) {
+        // 处理departType参数
+        if (parameterMap.containsKey("departType")) {
             String departType = parameterMap.get("departType")[0];
             if ("bureau".equals(departType)) {
                 queryWrapper.eq("depart_type", "bureau");
@@ -1086,428 +1351,309 @@ public class AssessDemocraticEvaluationSummaryController {
             }
         }
 
-        List<AssessDemocraticEvaluationSummary> jgList = new ArrayList<>();
-        if (parameterMap.get("leader") != null) {
-            String leader = parameterMap.get("leader")[0];
-            LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-            qw.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-            List<AssessLeaderDepartConfig> leaderConfig = deaderDepartConfigMapper.selectList(qw);
-            StringBuilder ids = new StringBuilder();
-            for (AssessLeaderDepartConfig config : leaderConfig) {
-                ids.append(config.getDepartId()).append(",");
-            }
-            // 去除最后逗号
-            if (ids.length() > 0) {
-                ids.deleteCharAt(ids.length() - 1);
-            }
+        return queryWrapper;
+    }
 
-            // 转换为List
-            List<String> departIds = Arrays.asList(ids.toString().split(","));
 
-            if (!departIds.isEmpty()) {
-                queryWrapper.in("depart", departIds);
-            }
-
-            if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
-                LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
-                lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
-                lqw.like(AssessDemocraticEvaluationSummary::getDepart, "JG");
-                lqw.isNotNull(AssessDemocraticEvaluationSummary::getScore);
-                jgList = democraticSummaryService.list(lqw);
-                if (!jgList.isEmpty()) {
-                    Iterator<AssessDemocraticEvaluationSummary> iterator = jgList.iterator();
-                    while (iterator.hasNext()) {
-                        AssessDemocraticEvaluationSummary a = iterator.next();
-                        String depart = a.getDepart();
-                        String substring = depart.substring(2);
-                        if (!departIds.contains(substring)) {
-                            iterator.remove();
-                        }
-                    }
-                }
-            }
+    // 辅助方法2：获取领导配置的部门ID
+    private List<String> getLeaderDepartIds(HttpServletRequest req, String year) {
+        Map<String, String[]> parameterMap = req.getParameterMap();
+        if (!parameterMap.containsKey("leader")) {
+            return Collections.emptyList();
         }
 
-        queryWrapper.orderByAsc("ranking");
+        String leader = parameterMap.get("leader")[0];
 
-        List<AssessDemocraticEvaluationSummary> data = democraticSummaryService.getData(queryWrapper);
+        return userCommonApi.getHistoryUnitDeptIds(Collections.singletonList(leader), year);
+    }
+
+    // 辅助方法3：获取JG列表
+    private <T> List<T> getJGList(HttpServletRequest req, String year,
+                                  List<String> leaderDepartIds,
+                                  Function<String, List<T>> queryFunction,
+                                  Function<T, String> departExtractor) {
+
+        Map<String, String[]> parameterMap = req.getParameterMap();
+        if (leaderDepartIds.isEmpty() ||
+                (parameterMap.containsKey("type") && !"z".equals(parameterMap.get("type")[0]))) {
+            return Collections.emptyList();
+        }
+
+        // 执行查询
+        List<T> jgItems = queryFunction.apply(year);
+
+        return jgItems.stream()
+                .filter(item -> {
+                    String depart = departExtractor.apply(item);
+                    if (depart == null || depart.length() <= 2) return false;
+                    String departId = depart.substring(2);
+                    return leaderDepartIds.contains(departId);
+                })
+                .collect(Collectors.toList());
+    }
+
+    // 辅助方法4：执行主查询
+    private <T> List<T> executeMainQuery(
+            QueryWrapper<T> queryWrapper,
+            List<T> jgList,
+            Function<QueryWrapper<T>, List<T>> dataFetcher,
+            Function<T, Integer> rankingExtractor) {
+
+        queryWrapper.orderByAsc("ranking");
+        List<T> data = dataFetcher.apply(queryWrapper);
+
         if (!jgList.isEmpty()) {
             data.addAll(jgList);
         }
 
-        // 以ranking降序排序，如果是null，排在后面
-        data.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getRanking, Comparator.nullsLast(Comparator.naturalOrder())));
+        // 按ranking升序排序，null值排在最后
+        data.sort(Comparator.comparing(
+                rankingExtractor,
+                Comparator.nullsLast(Comparator.naturalOrder())
+        ));
 
-        String hashId = params.getAppraisee();
-        // 找出Appraisee属性为hashId的索引
-        AssessDemocraticEvaluationSummary summary = data.stream().filter(item -> item.getAppraisee().equals(hashId)).findFirst().orElse(null);
-        int i1 = data.indexOf(summary) + 1;
+        return data;
+    }
 
+    // 辅助方法5：处理结果
+    private Map<String, Object> processResult(AssessDemocraticEvaluationSummary params,
+                                              List<AssessDemocraticEvaluationSummary> data,
+                                              HttpServletRequest req,
+                                              String year) {
         Map<String, Object> res = new HashMap<>();
+        String hashId = params.getAppraisee();
+
+        // 查找目标记录
+        Optional<AssessDemocraticEvaluationSummary> summaryOpt = data.stream()
+                .filter(item -> hashId.equals(item.getAppraisee()))
+                .findFirst();
+
+        if (!summaryOpt.isPresent()) {
+            res.put("underLine", false);
+            res.put("year", year);
+            res.put("data", 0);
+            return res;
+        }
+
+        AssessDemocraticEvaluationSummary summary = summaryOpt.get();
+        int index = data.indexOf(summary) + 1;
 
         Integer nums = params.getNums();
-        if (nums != null && i1 != -1) {
-            // nums除以100，保留两位小数
-            BigDecimal divide = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
-            // data的size乘divide，向下取整
-            int size = (int) (data.size() * divide.doubleValue());
-
-            int i = data.size() - size;
-
-            if (i1 > i) res.put("underLine", true);
-            else res.put("underLine", false);
+        if (nums == null || nums == 0) {
+            res.put("underLine", false);
             res.put("year", year);
-            if (summary == null) res.put("data", 0);
-            else res.put("data", (parameterMap.get("leader") != null) || Boolean.TRUE.equals(params.getTrial()) ? summary.getScopeRanking() : summary.getRanking());
+            res.put("data", req.getParameter("leader") != null || Boolean.TRUE.equals(params.getTrial()) ?
+                    summary.getScopeRanking() : summary.getRanking());
+            return res;
         }
+
+        // 计算分数线
+        BigDecimal percentage = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
+        int threshold = (int) (data.size() * (1 - percentage.doubleValue()));
+
+        res.put("underLine", index > threshold);
+        res.put("year", data.get(0).getCurrentYear()); // 假设所有记录年份相同
+        // todo: 使用哪个排名存疑
+        res.put("data", req.getParameter("leader") != null || Boolean.TRUE.equals(params.getTrial()) ?
+                summary.getScopeRanking() : summary.getRanking());
 
         return res;
     }
 
+    private <T> void calculateRankings(List<T> data,
+                                       Function<T, BigDecimal> scoreExtractor,
+                                       BiConsumer<T, Integer> rankingSetter) {
+        if (data.isEmpty()) return;
+
+        int rank = 1;
+        BigDecimal previousScore = scoreExtractor.apply(data.get(0));
+
+        for (int i = 0; i < data.size(); i++) {
+            T current = data.get(i);
+            BigDecimal currentScore = scoreExtractor.apply(current);
+
+            // 如果当前分数与前一个不同，更新排名
+            if (i > 0 && currentScore.compareTo(previousScore) != 0) {
+                rank = i + 1;
+                previousScore = currentScore;
+            }
+
+            rankingSetter.accept(current, rank);
+        }
+    }
+
     private Map<String, Object> getItem1DataMap(AssessDemocraticEvaluationSummary params,
                                                 HttpServletRequest req, String year) {
-        QueryWrapper<VmDemocraticAvgA> queryWrapper = new QueryWrapper<>();
-        Map<String, String[]> parameterMap = req.getParameterMap();
+        QueryWrapper<VmDemocraticAvgA> queryWrapper = buildQueryWrapper(req, year);
 
-        queryWrapper.eq("current_year", year);
+        List<String> leaderDepartIds = getLeaderDepartIds(req, year);
 
-        if (parameterMap.get("type") != null) {
-            String type = parameterMap.get("type")[0];
-            if ("z".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("23", "22", "32"));
-            } else if ("f".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("21", "31"));
-            }
-        }
-
-        if (parameterMap.get("departType") != null) {
-            String departType = parameterMap.get("departType")[0];
-            if ("bureau".equals(departType)) {
-                queryWrapper.eq("depart_type", "bureau");
-            } else {
-                queryWrapper.ne("depart_type", "bureau");
-            }
-        }
-
-        List<VmDemocraticAvgA> jgList = new ArrayList<>();
-        if (parameterMap.get("leader") != null) {
-            String leader = parameterMap.get("leader")[0];
-            LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-            qw.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-            List<AssessLeaderDepartConfig> leaderConfig = deaderDepartConfigMapper.selectList(qw);
-            StringBuilder ids = new StringBuilder();
-            for (AssessLeaderDepartConfig config : leaderConfig) {
-                ids.append(config.getDepartId()).append(",");
-            }
-            // 去除最后逗号
-            if (ids.length() > 0) {
-                ids.deleteCharAt(ids.length() - 1);
-            }
-
-            // 转换为List
-            List<String> departIds = Arrays.asList(ids.toString().split(","));
-
-            if (!departIds.isEmpty()) {
-                queryWrapper.in("depart", departIds);
-            }
-
-            if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
-                LambdaQueryWrapper<VmDemocraticAvgA> lqw = new LambdaQueryWrapper<>();
-                lqw.eq(VmDemocraticAvgA::getCurrentYear, year);
-                lqw.like(VmDemocraticAvgA::getDepart, "JG");
-                lqw.isNotNull(VmDemocraticAvgA::getScore);
-                jgList = avgAService.list(lqw);
-                if (!jgList.isEmpty()) {
-                    Iterator<VmDemocraticAvgA> iterator = jgList.iterator();
-                    while (iterator.hasNext()) {
-                        VmDemocraticAvgA a = iterator.next();
-                        String depart = a.getDepart();
-                        String substring = depart.substring(2);
-                        if (!departIds.contains(substring)) {
-                            iterator.remove();
-                        }
-                    }
-                }
-            }
-        }
+        List<VmDemocraticAvgA> jgList = getJGList(
+                req, year, leaderDepartIds,
+                // 查询函数
+                y -> {
+                    LambdaQueryWrapper<VmDemocraticAvgA> lqw = new LambdaQueryWrapper<>();
+                    lqw.eq(VmDemocraticAvgA::getCurrentYear, y)
+                            .like(VmDemocraticAvgA::getDepart, "JG")
+                            .isNotNull(VmDemocraticAvgA::getScore);
+                    return avgAService.list(lqw);
+                },
+                // 部门提取函数
+                VmDemocraticAvgA::getDepart
+        );
 
         queryWrapper.orderByAsc("ranking");
 
-        List<VmDemocraticAvgA> data = avgAService.getData(queryWrapper);
-        if (!jgList.isEmpty()) {
-            data.addAll(jgList);
-        }
+        List<VmDemocraticAvgA> data = executeMainQuery(
+                queryWrapper,
+                jgList,
+                // 数据获取函数
+                qw -> avgAService.getData(qw),
+                // 排名提取函数
+                VmDemocraticAvgA::getRanking
+        );
 
-        // 以scope降序排序，如果是null，排在后面
-        data.sort(Comparator.comparing(VmDemocraticAvgA::getScore, Comparator.nullsLast(Comparator.reverseOrder())));
-        // 间隙排名，相同分数并列，例如100，100，95，他们的排名是:1,1,3
-        int rank = 1;
-        for (int i = 0; i < data.size(); i++) {
-            VmDemocraticAvgA a = data.get(i);
-            if (i > 0 && data.get(i - 1).getScore().compareTo(a.getScore()) != 0) {
-                rank = i + 1;
-            }
-            a.setRanking(rank);
-        }
+        // 对data进行排序，按照分数降序排序
+        data.sort(Comparator.comparing(VmDemocraticAvgA::getScore, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
 
+        calculateRankings(data, VmDemocraticAvgA::getScore, VmDemocraticAvgA::setRanking);
 
-        String hashId = params.getAppraisee();
-        // 找出Appraisee属性为hashId的索引
-        VmDemocraticAvgA summary = data.stream().filter(item -> item.getAppraisee().equals(hashId)).findFirst().orElse(null);
-        int i1 = data.indexOf(summary) + 1;
+        return processResultItem(params, data, year, VmDemocraticAvgA::getAppraisee, VmDemocraticAvgA::getRanking);
+    }
+
+    private <T> Map<String, Object> processResultItem(AssessDemocraticEvaluationSummary params,
+                                                      List<T> data, String year,
+                                                      Function<T, String> appraiseeExtractor,
+                                                      Function<T, Integer> rankingExtractor) {
 
         Map<String, Object> res = new HashMap<>();
+        // 获取当前人员
+        String hashId = params.getAppraisee();
 
-        Integer nums = params.getNums();
-        if (nums != null) {
-            // nums除以100，保留两位小数
-            BigDecimal divide = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
-            // data的size乘divide，向下取整
-            int size = (int) (data.size() * divide.doubleValue());
+        // 查找目标记录
+        Optional<T> summaryOpt = data.stream()
+                .filter(item -> hashId.equals(appraiseeExtractor.apply(item)))
+                .findFirst();
 
-            int i = data.size() - size;
-
-            if (i1 > i) res.put("underLine", true);
-            else res.put("underLine", false);
+        // 如果未找到，则...
+        if (!summaryOpt.isPresent()) {
+            res.put("underLine", false);
             res.put("year", year);
-            if (summary == null) res.put("data", 0);
-            else res.put("data", summary.getRanking());
+            res.put("data", 0);
+            return res;
         }
+
+        // 获取当前人员
+        T summary = summaryOpt.get();
+        int index = data.indexOf(summary) + 1;
+
+        // 获取百分比，如果获取不到，则无线
+        Integer nums = params.getNums();
+        if (nums == null || nums == 0) {
+            res.put("underLine", false);
+            res.put("year", year);
+            res.put("data", rankingExtractor.apply(summary));
+            return res;
+        }
+
+        // 计算分数线
+        BigDecimal percentage = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
+        int threshold = (int) (data.size() * (1 - percentage.doubleValue()));
+
+        res.put("underLine", index > threshold);
+        res.put("year", year);
+        res.put("data", rankingExtractor.apply(summary));
 
         return res;
     }
 
     private Map<String, Object> getItem2DataMap(AssessDemocraticEvaluationSummary params,
                                                 HttpServletRequest req, String year) {
-        QueryWrapper<VmDemocraticAvgB> queryWrapper = new QueryWrapper<>();
-        Map<String, String[]> parameterMap = req.getParameterMap();
 
-        queryWrapper.eq("current_year", year);
+        QueryWrapper<VmDemocraticAvgB> queryWrapper = buildQueryWrapper(req, year);
 
-        if (parameterMap.get("type") != null) {
-            String type = parameterMap.get("type")[0];
-            if ("z".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("23", "22", "32"));
-            } else if ("f".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("21", "31"));
-            }
-        }
+        List<String> leaderDepartIds = getLeaderDepartIds(req, year);
 
-        if (parameterMap.get("departType") != null) {
-            String departType = parameterMap.get("departType")[0];
-            if ("bureau".equals(departType)) {
-                queryWrapper.eq("depart_type", "bureau");
-            } else {
-                queryWrapper.ne("depart_type", "bureau");
-            }
-        }
+        List<VmDemocraticAvgB> jgList = getJGList(
+                req, year, leaderDepartIds,
+                y -> {
+                    LambdaQueryWrapper<VmDemocraticAvgB> lqw = new LambdaQueryWrapper<>();
+                    lqw.eq(VmDemocraticAvgB::getCurrentYear, y)
+                            .like(VmDemocraticAvgB::getDepart, "JG")
+                            .isNotNull(VmDemocraticAvgB::getScore);
+                    return avgBService.list(lqw);
+                },
+                VmDemocraticAvgB::getDepart
+        );
 
-        List<VmDemocraticAvgB> jgList = new ArrayList<>();
-        if (parameterMap.get("leader") != null) {
-            String leader = parameterMap.get("leader")[0];
-            LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-            qw.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-            List<AssessLeaderDepartConfig> leaderConfig = deaderDepartConfigMapper.selectList(qw);
-            StringBuilder ids = new StringBuilder();
-            for (AssessLeaderDepartConfig config : leaderConfig) {
-                ids.append(config.getDepartId()).append(",");
-            }
-            // 去除最后逗号
-            if (ids.length() > 0) {
-                ids.deleteCharAt(ids.length() - 1);
-            }
+        List<VmDemocraticAvgB> data = executeMainQuery(
+                queryWrapper,
+                jgList,
+                qw -> avgBService.getData(qw),
+                VmDemocraticAvgB::getRanking
+        );
 
-            // 转换为List
-            List<String> departIds = Arrays.asList(ids.toString().split(","));
+        // 对data进行排序，按照分数降序排序
+        data.sort(Comparator.comparing(VmDemocraticAvgB::getScore, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
 
-            if (!departIds.isEmpty()) {
-                queryWrapper.in("depart", departIds);
-            }
+        calculateRankings(data, VmDemocraticAvgB::getScore, VmDemocraticAvgB::setRanking);
 
-            if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
-                LambdaQueryWrapper<VmDemocraticAvgB> lqw = new LambdaQueryWrapper<>();
-                lqw.eq(VmDemocraticAvgB::getCurrentYear, year);
-                lqw.like(VmDemocraticAvgB::getDepart, "JG");
-                lqw.isNotNull(VmDemocraticAvgB::getScore);
-                jgList = avgBService.list(lqw);
-                if (!jgList.isEmpty()) {
-                    Iterator<VmDemocraticAvgB> iterator = jgList.iterator();
-                    while (iterator.hasNext()) {
-                        VmDemocraticAvgB a = iterator.next();
-                        String depart = a.getDepart();
-                        String substring = depart.substring(2);
-                        if (!departIds.contains(substring)) {
-                            iterator.remove();
-                        }
-                    }
-                }
-            }
-        }
-
-        queryWrapper.orderByAsc("ranking");
-
-        List<VmDemocraticAvgB> data = avgBService.getData(queryWrapper);
-        if (!jgList.isEmpty()) {
-            data.addAll(jgList);
-        }
-
-        // 以scope降序排序，如果是null，排在后面
-        data.sort(Comparator.comparing(VmDemocraticAvgB::getScore, Comparator.nullsLast(Comparator.reverseOrder())));
-        // 间隙排名，相同分数并列，例如100，100，95，他们的排名是:1,1,3
-        int rank = 1;
-        for (int i = 0; i < data.size(); i++) {
-            VmDemocraticAvgB a = data.get(i);
-            if (i > 0 && data.get(i - 1).getScore().compareTo(a.getScore()) != 0) {
-                rank = i + 1;
-            }
-            a.setRanking(rank);
-        }
-
-
-        String hashId = params.getAppraisee();
-        // 找出Appraisee属性为hashId的索引
-        VmDemocraticAvgB summary = data.stream().filter(item -> item.getAppraisee().equals(hashId)).findFirst().orElse(null);
-        int i1 = data.indexOf(summary) + 1;
-
-        Map<String, Object> res = new HashMap<>();
-
-        Integer nums = params.getNums();
-        if (nums != null) {
-            // nums除以100，保留两位小数
-            BigDecimal divide = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
-            // data的size乘divide，向下取整
-            int size = (int) (data.size() * divide.doubleValue());
-
-            int i = data.size() - size;
-
-            if (i1 > i) res.put("underLine", true);
-            else res.put("underLine", false);
-            res.put("year", year);
-            if (summary == null) res.put("data", 0);
-            else res.put("data", summary.getRanking());
-        }
-
-        return res;
+        return processResultItem(params, data, year, VmDemocraticAvgB::getAppraisee, VmDemocraticAvgB::getRanking);
     }
 
     private Map<String, Object> getItem3DataMap(AssessDemocraticEvaluationSummary params,
                                                 HttpServletRequest req, String year) {
-        QueryWrapper<VmDemocraticAvgC> queryWrapper = new QueryWrapper<>();
-        Map<String, String[]> parameterMap = req.getParameterMap();
+        QueryWrapper<VmDemocraticAvgC> queryWrapper = buildQueryWrapper(req, year);
 
-        queryWrapper.eq("current_year", year);
+        List<String> leaderDepartIds = getLeaderDepartIds(req, year);
 
-        if (parameterMap.get("type") != null) {
-            String type = parameterMap.get("type")[0];
-            if ("z".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("23", "22", "32"));
-            } else if ("f".equals(type)) {
-                queryWrapper.in("type", Arrays.asList("21", "31"));
-            }
-        }
+        List<VmDemocraticAvgC> jgList = getJGList(
+                req, year, leaderDepartIds,
+                y -> {
+                    LambdaQueryWrapper<VmDemocraticAvgC> lqw = new LambdaQueryWrapper<>();
+                    lqw.eq(VmDemocraticAvgC::getCurrentYear, y)
+                            .like(VmDemocraticAvgC::getDepart, "JG")
+                            .isNotNull(VmDemocraticAvgC::getScore);
+                    return avgCService.list(lqw);
+                },
+                VmDemocraticAvgC::getDepart
+        );
 
-        if (parameterMap.get("departType") != null) {
-            String departType = parameterMap.get("departType")[0];
-            if ("bureau".equals(departType)) {
-                queryWrapper.eq("depart_type", "bureau");
-            } else {
-                queryWrapper.ne("depart_type", "bureau");
-            }
-        }
+        List<VmDemocraticAvgC> data = executeMainQuery(
+                queryWrapper,
+                jgList,
+                qw -> avgCService.getData(qw),
+                VmDemocraticAvgC::getRanking
+        );
 
-        List<VmDemocraticAvgC> jgList = new ArrayList<>();
-        if (parameterMap.get("leader") != null) {
-            String leader = parameterMap.get("leader")[0];
-            LambdaQueryWrapper<AssessLeaderDepartConfig> qw = new LambdaQueryWrapper<>();
-            qw.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-            List<AssessLeaderDepartConfig> leaderConfig = deaderDepartConfigMapper.selectList(qw);
-            StringBuilder ids = new StringBuilder();
-            for (AssessLeaderDepartConfig config : leaderConfig) {
-                ids.append(config.getDepartId()).append(",");
-            }
-            // 去除最后逗号
-            if (ids.length() > 0) {
-                ids.deleteCharAt(ids.length() - 1);
-            }
+        // 对data进行排序，按照分数降序排序
+        data.sort(Comparator.comparing(VmDemocraticAvgC::getScore, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
 
-            // 转换为List
-            List<String> departIds = Arrays.asList(ids.toString().split(","));
+        calculateRankings(data, VmDemocraticAvgC::getScore, VmDemocraticAvgC::setRanking);
 
-            if (!departIds.isEmpty()) {
-                queryWrapper.in("depart", departIds);
-            }
-
-            if (parameterMap.get("type") == null || "z".equals(parameterMap.get("type")[0])) {
-                LambdaQueryWrapper<VmDemocraticAvgC> lqw = new LambdaQueryWrapper<>();
-                lqw.eq(VmDemocraticAvgC::getCurrentYear, year);
-                lqw.like(VmDemocraticAvgC::getDepart, "JG");
-                lqw.isNotNull(VmDemocraticAvgC::getScore);
-                jgList = avgCService.list(lqw);
-                if (!jgList.isEmpty()) {
-                    Iterator<VmDemocraticAvgC> iterator = jgList.iterator();
-                    while (iterator.hasNext()) {
-                        VmDemocraticAvgC a = iterator.next();
-                        String depart = a.getDepart();
-                        String substring = depart.substring(2);
-                        if (!departIds.contains(substring)) {
-                            iterator.remove();
-                        }
-                    }
-                }
-            }
-        }
-
-        queryWrapper.orderByAsc("ranking");
-
-        List<VmDemocraticAvgC> data = avgCService.getData(queryWrapper);
-        if (!jgList.isEmpty()) {
-            data.addAll(jgList);
-        }
-
-        // 以scope降序排序，如果是null，排在后面
-        data.sort(Comparator.comparing(VmDemocraticAvgC::getScore, Comparator.nullsLast(Comparator.reverseOrder())));
-        // 间隙排名，相同分数并列，例如100，100，95，他们的排名是:1,1,3
-        int rank = 1;
-        for (int i = 0; i < data.size(); i++) {
-            VmDemocraticAvgC a = data.get(i);
-            if (i > 0 && data.get(i - 1).getScore().compareTo(a.getScore()) != 0) {
-                rank = i + 1;
-            }
-            a.setRanking(rank);
-        }
-
-
-        String hashId = params.getAppraisee();
-        // 找出Appraisee属性为hashId的索引
-        VmDemocraticAvgC summary = data.stream().filter(item -> item.getAppraisee().equals(hashId)).findFirst().orElse(null);
-        int i1 = data.indexOf(summary) + 1;
-
-        Map<String, Object> res = new HashMap<>();
-
-        Integer nums = params.getNums();
-        if (nums != null) {
-            // nums除以100，保留两位小数
-            BigDecimal divide = new BigDecimal(nums).divide(new BigDecimal(100), 2, RoundingMode.HALF_UP);
-            // data的size乘divide，向下取整
-            int size = (int) (data.size() * divide.doubleValue());
-
-            int i = data.size() - size;
-
-            if (i1 > i) res.put("underLine", true);
-            else res.put("underLine", false);
-            res.put("year", year);
-            if (summary == null) res.put("data", 0);
-            else res.put("data", summary.getRanking());
-        }
-
-        return res;
+        return processResultItem(params, data, year, VmDemocraticAvgC::getAppraisee, VmDemocraticAvgC::getRanking);
     }
 
     @PostMapping("/svg2Excel")
     public void svg2Excel(@RequestParam("svgs") List<MultipartFile> svgFiles,
-                          @RequestParam("name") String name,
+                          @RequestParam("hashId") String hashId,
                           @RequestParam("desc") String desc,
+                          @RequestParam(name = "startYear", defaultValue = "0", required = false) String startYear,
+                          @RequestParam(name = "endYear", defaultValue = "0", required = false) String endYear,
                           HttpServletResponse response) throws Exception {
+        if ("0".equals(endYear) || "undefined".equals(endYear) || endYear == null) {
+            AssessCurrentAssess info = assessCommonApi.getCurrentAssessInfo("annual");
+            endYear = info.getCurrentYear();
+        }
+
+        if ("0".equals(startYear) || "undefined".equals(startYear) || startYear == null) {
+            startYear = Integer.parseInt(endYear) - 2 + "";
+        }
+
+        int startYearInt = Integer.parseInt(startYear);
+        int endYearInt = Integer.parseInt(endYear);
+
+
         String templatePath = uploadPath + "/template/" + "scoreChange.xlsx";
 //        templatePath = templatePath.replace("//", "\\");
 
@@ -1534,14 +1680,29 @@ public class AssessDemocraticEvaluationSummaryController {
         ExcelTemplateUtils.insertImage(workbook, sheet, imageMapReverse);
 
         // 4. 替换文本
+        Map<String, String> peopleInfo = userCommonApi.getPeopleInfo(hashId, startYear);
+        if (peopleInfo == null) peopleInfo = userCommonApi.getPeopleInfo(hashId, endYear);
+
         Map<String, String> textMap = new HashMap<>();
-        textMap.put("${text_1}", CommonUtils.getNameByHashId(name) + "近三年民主测评排名变化");
+        String text = CommonUtils.getNameByHashId(hashId) + startYear + "-" + endYear + "年度民主测评排名变化";
+        textMap.put("${text_1}", text);
         textMap.put("${desc}", desc);
+
+        textMap.put("${p_name}", peopleInfo.get("name"));
+        textMap.put("${depart_type}", peopleInfo.get("departType"));
+        textMap.put("${p_depart}", peopleInfo.get("depart"));
+        textMap.put("${p_type}", peopleInfo.get("type"));
+        textMap.put("${p_unit}", peopleInfo.get("unit"));
+        textMap.put("${time}", new SimpleDateFormat("yyyy年MM月dd日 HH:mm:ss").format(new Date()));
+
         ExcelTemplateUtils.replaceText(sheet, textMap);
 
-        // 5. 输出 Excel
-        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        response.setHeader("Content-Disposition", "attachment; filename=report.xlsx");
+        // 6. 输出 Excel
+        String filename = text + ".xlsx";
+        response.setContentType("application/vnd.ms-excel");
+        response.setHeader("Content-Disposition", "attachment; filename=" + URLEncoder.encode(filename, "UTF-8"));
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
         workbook.write(response.getOutputStream());
         workbook.close();
     }
@@ -1550,19 +1711,23 @@ public class AssessDemocraticEvaluationSummaryController {
     /**
      * 将 SVG 字节数组转换为 PNG 字节数组
      */
-    private byte[] convertSvgToPng(byte[] svgBytes) throws Exception {
+    public byte[] convertSvgToPng(byte[] svgBytes) throws Exception {
+        // 使用 Batik  transcoder 示例
         PNGTranscoder transcoder = new PNGTranscoder();
 
-        // 关键设置：提高分辨率（默认 96 DPI，此处设为 300 DPI）
+        // 设置高分辨率（300 DPI）
         transcoder.addTranscodingHint(PNGTranscoder.KEY_PIXEL_UNIT_TO_MILLIMETER, 25.4f / 300);
 
-        try (ByteArrayInputStream svgStream = new ByteArrayInputStream(svgBytes);
-             ByteArrayOutputStream pngStream = new ByteArrayOutputStream()) {
-            TranscoderInput input = new TranscoderInput(svgStream);
-            TranscoderOutput output = new TranscoderOutput(pngStream);
-            transcoder.transcode(input, output);
-            return pngStream.toByteArray();
-        }
+        // 或者直接设置输出尺寸为2倍大小
+        transcoder.addTranscodingHint(PNGTranscoder.KEY_WIDTH, 590f); // 295 * 2
+        transcoder.addTranscodingHint(PNGTranscoder.KEY_HEIGHT, 680f); // 340 * 2
+
+        TranscoderInput input = new TranscoderInput(new ByteArrayInputStream(svgBytes));
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        TranscoderOutput output = new TranscoderOutput(outputStream);
+
+        transcoder.transcode(input, output);
+        return outputStream.toByteArray();
     }
 
     /**

@@ -9,6 +9,7 @@ import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.system.entity.SysUser;
 
 import java.util.List;
+import java.util.Map;
 
 public interface UserCommonApi {
     IPage<SysUser> queryDepartUserPageList(String departId,
@@ -119,6 +120,7 @@ public interface UserCommonApi {
      */
     List<SysUser> getAllLeader();
     List<SysUser> getHistoryAssessUnit(String year);
+    List<String> getHistoryUnitDeptIds(List<String> leaders, String year);
 
     /**
      * 删除当前登录用户，慎用！！！
@@ -133,5 +135,7 @@ public interface UserCommonApi {
      * 判断考核单元内是否有总师、二巡
      */
     Boolean hasChiefEngineer(AssessLeaderDepartConfig config);
+
+    Map<String, String> getPeopleInfo(String hashId, String year);
 
 }

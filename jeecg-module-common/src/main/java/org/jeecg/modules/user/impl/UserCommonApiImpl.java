@@ -1012,7 +1012,7 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
         lqw.eq(LeaderDepartHistory::getAssessYear, year);
         List<LeaderDepartHistory> all = ldHistoryMapper.selectList(lqw);
         List<SysUser> users = new ArrayList<>();
-        if (all != null && !all.isEmpty()) {
+        if (all != null && !all.isEmpty() && year != null) {
             for (LeaderDepartHistory h : all) {
                 SysUser user = new SysUser();
                 user.setId(h.getLeaderId());
@@ -1020,11 +1020,37 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
                 user.setUsername(h.getUsername());
                 users.add(user);
             }
+        } else {
+            return getAllLeader();
         }
 
-//        return userCommonMapper.getHistoryAssessUnit(year);
         return users;
     }
+
+    @Override
+    public List<String> getHistoryUnitDeptIds(List<String> leaders, String year) {
+        LambdaQueryWrapper<LeaderDepartHistory> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(LeaderDepartHistory::getAssessYear, year);
+        lqw.in(LeaderDepartHistory::getLeaderId, leaders);
+        List<LeaderDepartHistory> all = ldHistoryMapper.selectList(lqw);
+        List<String> res = new ArrayList<>();
+        if (all != null && !all.isEmpty() && year != null) {
+            for (LeaderDepartHistory h : all) {
+                res.addAll(Arrays.asList(h.getDepartId().split(",")));
+            }
+        } else {
+            LambdaQueryWrapper<AssessLeaderDepartConfig> lqw2 = new LambdaQueryWrapper<>();
+            lqw2.in(AssessLeaderDepartConfig::getLeaderId, leaders);
+            List<AssessLeaderDepartConfig> configs = leaderDepartConfigMapper.selectList(lqw2);
+            for (AssessLeaderDepartConfig c : configs) {
+                res.addAll(Arrays.asList(c.getDepartId().split(",")));
+            }
+        }
+
+        return res;
+    }
+
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -1104,5 +1130,33 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
         List<AssessAnnualSummary> list = annualSummaryMapper.selectList(lqw);
 
         return list != null && !list.isEmpty();
+    }
+
+    @Override
+    public Map<String, String> getPeopleInfo(String hashId, String year) {
+        LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessAnnualSummary::getHashId, hashId);
+        lqw.eq(AssessAnnualSummary::getCurrentYear, year);
+        AssessAnnualSummary summary = annualSummaryMapper.selectOne(lqw);
+        if (summary == null) {
+            return null;
+        }
+
+        Map<String, String> res = new HashMap<>();
+        res.put("name", summary.getPerson());
+        res.put("depart", departCommonApi.getDepartNameById(summary.getDepart()));
+        res.put("departType", "bureau".equals(summary.getDepartType()) ? "处室" : "单位");
+        String type = summary.getType();
+        res.put("type", "chief".equals(type) ? "正职" : "deputy".equals(type) ? "副职" : "chiefPro".equals(type) ? "总师、二巡" : "其他");
+
+        LambdaQueryWrapper<LeaderDepartHistory> lqw2 = new LambdaQueryWrapper<>();
+        lqw2.eq(LeaderDepartHistory::getAssessYear, year);
+        List<LeaderDepartHistory> lds = ldHistoryMapper.selectList(lqw2);
+        for (LeaderDepartHistory ld : lds) {
+            if (ld.getDepartId().contains(summary.getDepart())) {
+                res.put("unit", ld.getRealname());
+            }
+        }
+        return res;
     }
 }
