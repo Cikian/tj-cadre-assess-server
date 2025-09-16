@@ -19,6 +19,7 @@ import org.jeecg.modules.enums.CommonEnum;
 import org.jeecg.modules.sys.AssessCommonApi;
 import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.CommissionItem;
+import org.jeecg.modules.sys.entity.LeaderDepartHistory;
 import org.jeecg.modules.sys.entity.annual.*;
 import org.jeecg.modules.sys.entity.business.AssessBusinessCommend;
 import org.jeecg.modules.sys.entity.business.AssessBusinessDenounce;
@@ -26,6 +27,7 @@ import org.jeecg.modules.sys.entity.business.AssessBusinessDepartFill;
 import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.sys.entity.report.AssessReportFill;
 import org.jeecg.modules.sys.mapper.AssessCurrentAssessMapper;
+import org.jeecg.modules.sys.mapper.LeaderDepartHistoryMapper;
 import org.jeecg.modules.sys.mapper.SysCommonMapper;
 import org.jeecg.modules.sys.mapper.annual.*;
 import org.jeecg.modules.sys.mapper.business.AssessBusinessCommendMapper;
@@ -64,6 +66,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -109,6 +112,8 @@ public class AssessCommonApiImpl implements AssessCommonApi {
     private AssessAssistConfigMapper assistConfigMapper;
     @Autowired
     private DepartCommonApi departCommonApi;
+    @Autowired
+    private LeaderDepartHistoryMapper ldhMapper;
 
     // 定义评估类型枚举
     private enum AssessType {
@@ -923,6 +928,35 @@ public class AssessCommonApiImpl implements AssessCommonApi {
         res.put("count", count);
 
         return res;
+    }
+
+    @Override
+    public void updateLdh(String year) {
+        if (year == null) {
+            AssessCurrentAssess currentAssessInfo = this.getCurrentAssessInfo("annual");
+            if (currentAssessInfo != null) {
+                year = currentAssessInfo.getCurrentYear();
+            }
+        }
+
+        LambdaQueryWrapper<LeaderDepartHistory> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(LeaderDepartHistory::getAssessYear, year);
+        ldhMapper.delete(lqw);
+        List<AssessLeaderDepartConfig> configList = leaderDepartConfigMapper.selectList(null);
+
+        List<SysUser> allLeader = userCommonApi.getAllLeader();
+        // 装换位KV，k为id，v为SysUser
+        Map<String, SysUser> leaderMap = allLeader.stream().collect(Collectors.toMap(SysUser::getId, Function.identity()));
+
+        for (AssessLeaderDepartConfig config : configList) {
+            LeaderDepartHistory ldh = new LeaderDepartHistory();
+            ldh.setAssessYear(year);
+            ldh.setDepartId(config.getDepartId());
+            ldh.setLeaderId(config.getLeaderId());
+            ldh.setUsername(leaderMap.get(config.getLeaderId()).getUsername());
+            ldh.setRealname(leaderMap.get(config.getLeaderId()).getRealname());
+            ldhMapper.insert(ldh);
+        }
     }
 
     @Autowired

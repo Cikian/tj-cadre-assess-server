@@ -456,6 +456,8 @@ public class AssessAnnualFillController {
 
 
         fillService.initAssess(departFillDTO);
+
+        assessCommonApi.updateLdh(currentYear);
         return Result.OK("添加成功！");
     }
 

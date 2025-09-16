@@ -507,6 +507,7 @@ public class AssessCommonController {
                 break;
             case "annual":
                 annualFillService.stopAssess();
+                assessCommonApi.updateLdh(null);
                 break;
         }
 

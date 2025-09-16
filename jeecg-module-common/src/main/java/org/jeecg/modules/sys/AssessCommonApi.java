@@ -79,4 +79,5 @@ public interface AssessCommonApi {
 
     JSONObject getAssessingStatus(SysUser user, List<AssessCurrentAssess> assessingList, JSONObject res);
 
+    void updateLdh(String year);
 }
