@@ -332,7 +332,7 @@ public class AssessDemocraticEvaluationSummaryController {
         }
 
         Map<String, Object> param = new JSONObject();
-        param.put("excelConfigId", "1127476665576587264");
+        param.put("excelConfigId", "1127770269838737408");
         param.put("queryParam", queryParam);
         String filename = this.getDesc4Excel(params) + ".xlsx";
         assessCommonApi.getExportExcel(url, filename, param, response);
