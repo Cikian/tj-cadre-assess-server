@@ -116,7 +116,7 @@ public class AssessAnnualFillController {
         Map<String, String[]> parameterMap = req.getParameterMap();
         if (parameterMap.get("currentYear") == null) {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
             }
         }

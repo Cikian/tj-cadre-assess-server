@@ -119,6 +119,7 @@ public interface UserCommonApi {
      * 获取所有局领导
      */
     List<SysUser> getAllLeader();
+    List<SysUser> getCurrentLeader();
     List<SysUser> getHistoryAssessUnit(String year);
     List<String> getHistoryUnitDeptIds(List<String> leaders, String year);
 

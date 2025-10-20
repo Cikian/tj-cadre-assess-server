@@ -97,7 +97,7 @@ public class AssessAnnualExcellentRatioServiceImpl extends ServiceImpl<AssessAnn
 
     @Override
     public List<AssessAnnualExcellentNum> getInitLeaderData() {
-        List<SysUser> allLeader = userCommonApi.getAllLeader();
+        List<SysUser> allLeader = userCommonApi.getCurrentLeader();
 
         LambdaQueryWrapper<AssessAnnualExcellentRatio> lqw = new LambdaQueryWrapper<>();
         lqw.eq(AssessAnnualExcellentRatio::getEnable, 1);

@@ -257,7 +257,7 @@ public class AssessLeaderRecServiceImpl extends ServiceImpl<AssessLeaderRecMappe
         if (!recList.isEmpty()) {
             for (AssessLeaderRec rec : recList) {
                 if (!"1".equals(rec.getStatus())) {
-                    throw new JeecgBootException("推优信息已推送至局领导，无法刷新！");
+                    throw new JeecgBootException("推优信息已推送至下一节点，无法刷新！");
                 }
                 recIds.add(rec.getId());
             }

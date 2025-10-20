@@ -399,6 +399,17 @@ public class AssessCommonController {
         }
     }
 
+    @PostMapping(value = "/downloadAnnualFile")
+    public void downloadAnnualZip(@RequestParam String year, HttpServletResponse response) {
+        String zipPath = uploadPath + "//annual//person//" + year;
+        File file = new File(zipPath);// 创建指定目录和文件名称的文件对象
+        try {
+            FolderToZipUtil.zip(zipPath, year, response);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     @GetMapping("/currentUserRoles")
     public Result<List<String>> getCurrentUserRoles() {
         LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
@@ -493,8 +504,7 @@ public class AssessCommonController {
     }
 
     @DeleteMapping("/stop")
-    public Result<?> stopAssess(@RequestParam(name = "assess") String assess) {
-        assessCommonApi.stopAssess(assess);
+    public Result<?>  stopAssess(@RequestParam(name = "assess") String assess) {
         switch (assess) {
             case "regular":
                 regularReportService.stopAssess();

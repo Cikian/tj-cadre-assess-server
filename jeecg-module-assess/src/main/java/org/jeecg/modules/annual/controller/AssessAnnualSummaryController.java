@@ -525,7 +525,7 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
         List<Map<String, Object>> paramList = new ArrayList<>();
         List<String> entryNames = new ArrayList<>();
 
-        List<SysUser> allLeader = userCommonApi.getAllLeader();
+        List<SysUser> allLeader = userCommonApi.getHistoryAssessUnit(year);
         Map<String, String> leaderMap = allLeader.stream().collect(Collectors.toMap(SysUser::getId, SysUser::getRealname));
 
         for (SysUser user : allLeader) {
@@ -564,16 +564,16 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
     }
 
     @GetMapping("/getRecommendTemp")
-    public Result<IPage<RecommendTempVO>> getRecommendTemp() {
-        List<RecommendTempVO> recommendTemp = summaryService.getRecommendTemp();
+    public Result<IPage<RecommendTempVO>> getRecommendTemp(@RequestParam(name = "year", required = false, defaultValue = "0") String year) {
+        List<RecommendTempVO> recommendTemp = summaryService.getRecommendTemp(year);
         IPage<RecommendTempVO> page = new Page<>();
         page.setRecords(recommendTemp);
         return Result.OK(page);
     }
 
     @GetMapping("/getRecommendTempExl")
-    public JSONObject getRecommendTempExl() {
-        List<AssessAnnualRecommendTemp> reportQueries = summaryService.getRecommendTempExl();
+    public JSONObject getRecommendTempExl(@RequestParam(name = "year", required = false, defaultValue = "0") String year) {
+        List<AssessAnnualRecommendTemp> reportQueries = summaryService.getRecommendTempExl(year);
 
         List<SysDepartModel> sysDepartModels = departCommonApi.queryAllDepart();
         Map<String, String> departMap = sysDepartModels.stream()
@@ -628,9 +628,10 @@ public class AssessAnnualSummaryController extends JeecgController<AssessAnnualS
     }
 
     @PostMapping("/exportExl")
-    public void exportExl(@Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
+    public void exportExl(@Value("${server.port}") String port, @RequestParam(name = "year", required = false, defaultValue = "0") String year, HttpServletRequest request, HttpServletResponse response) {
         String url = "http://localhost:" + port + "/jmreport/exportAllExcelStream" + "?token=" + TokenUtils.getTokenByRequest(request);
         JSONObject queryParam = new JSONObject();
+        queryParam.put("year", year);
         Map<String, Object> param = new JSONObject();
         param.put("excelConfigId", "1022275182707777536");
         param.put("queryParam", queryParam);

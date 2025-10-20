@@ -46,6 +46,7 @@ import org.jeecg.modules.system.mapper.SysUserDepartMapper;
 import org.jeecg.modules.system.mapper.SysUserMapper;
 import org.jeecg.modules.system.mapper.SysUserRoleMapper;
 import org.jeecg.modules.system.service.ISysDepartService;
+import org.jeecg.modules.system.service.ISysRoleService;
 import org.jeecg.modules.system.service.ISysUserDepartService;
 import org.jeecg.modules.system.service.ISysUserService;
 import org.jeecg.modules.system.service.impl.ThirdAppDingtalkServiceImpl;
@@ -145,7 +146,7 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
             if (!"0".equals(year)) {
                 sysUsers = this.getHistoryAssessUnit(year);
             } else {
-                sysUsers = this.getAllLeader();
+                sysUsers = this.getCurrentLeader();
             }
             pageList = new Page<>();
             pageList.setRecords(sysUsers);
@@ -180,7 +181,10 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
 
     @Override
     public List<SysUser> getUserByRoleCode(String roleCode) {
-        return userCommonMapper.getUserByRoleCode(roleCode);
+        List<SysUser> userByRoleCode = userCommonMapper.getUserByRoleCode(roleCode);
+        // 移除username中包含“admin”的用户
+        userByRoleCode.removeIf(item -> item.getUsername().contains("admin"));
+        return  userByRoleCode;
     }
 
     /**
@@ -1003,6 +1007,11 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
 
     @Override
     public List<SysUser> getAllLeader() {
+        return this.getUserByRoleCode("director_leader");
+    }
+
+    @Override
+    public List<SysUser> getCurrentLeader() {
         return userCommonMapper.getAllLeaders();
     }
 

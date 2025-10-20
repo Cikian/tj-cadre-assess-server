@@ -47,11 +47,11 @@ public interface IAssessAnnualSummaryService extends IService<AssessAnnualSummar
 
     List<AssessLeaderRecItem> getLeaderRecommendList(String year, String leader);
 
-    List<RecommendTempVO> getRecommendTemp();
+    List<RecommendTempVO> getRecommendTemp(String year);
 
     void returnLeaderRecommend(String recommendTempId);
 
-    List<AssessAnnualRecommendTemp> getRecommendTempExl();
+    List<AssessAnnualRecommendTemp> getRecommendTempExl(String year);
 
     List<InspectionVO> getInspection(String year);
 

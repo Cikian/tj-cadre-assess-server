@@ -441,7 +441,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
             summary.setHashId(hashId);
         }
 
-        List<SysUser> allLeader = userCommonApi.getAllLeader();
+        List<SysUser> allLeader = userCommonApi.getCurrentLeader();
 
         LambdaQueryWrapper<AssessAnnualExcellentRatio> lqw = new LambdaQueryWrapper<>();
         lqw.eq(AssessAnnualExcellentRatio::getEnable, 1);
@@ -660,7 +660,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
 
     @Override
     public AnnualIndexEmployee[] getPartial(String departId, AssessCurrentAssess assessInfo) {
-        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear())) {
+        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()) {
             return new AnnualIndexEmployee[]{new AnnualIndexEmployee("当前无正在进行的考核")};
         }
         // 创建查询条件，匹配 department_code 字段
@@ -1208,6 +1208,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
         if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
             currentAssessInfo.setAssessing(false);
+            String year = currentAssessInfo.getCurrentYear();
 
             LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();
             lqw.eq(AssessAnnualSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
@@ -1226,6 +1227,10 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
             LambdaQueryWrapper<AssessAnnualArrange> lqw3 = new LambdaQueryWrapper<>();
             lqw3.in(AssessAnnualArrange::getAnnualFillId, fillIds);
             arrangeMapper.delete(lqw3);
+
+            LambdaQueryWrapper<AssessAnnualExcellentNum> lqw4 = new LambdaQueryWrapper<>();
+            lqw4.eq(AssessAnnualExcellentNum::getCurrentYear, year);
+            excellentNumMapper.delete(lqw4);
 
             assessCommonApi.revocationCurrentYear(currentAssessInfo);
         }

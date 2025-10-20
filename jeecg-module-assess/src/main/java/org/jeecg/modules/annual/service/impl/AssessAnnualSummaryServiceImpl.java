@@ -742,11 +742,14 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
     }
 
     @Override
-    public List<RecommendTempVO> getRecommendTemp() {
-        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
+    public List<RecommendTempVO> getRecommendTemp(String year) {
+        if (year == null || "0".equals(year)) {
+            AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
+            year = currentAssessInfo.getCurrentYear();
+        }
 
         LambdaQueryWrapper<AssessAnnualRecommendTemp> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(AssessAnnualRecommendTemp::getCurrentYear, currentAssessInfo.getCurrentYear());
+        lqw.eq(AssessAnnualRecommendTemp::getCurrentYear, year);
         lqw.eq(AssessAnnualRecommendTemp::isPass, true);
 
         List<AssessAnnualRecommendTemp> list = recommendTempMapper.selectList(lqw);
@@ -902,12 +905,13 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
     }
 
     @Override
-    public List<AssessAnnualRecommendTemp> getRecommendTempExl() {
-        LambdaQueryWrapper<AssessAnnualRecommendTemp> lqw = new LambdaQueryWrapper<>();
-        AssessCurrentAssess annual = assessCommonApi.getCurrentAssessInfo("annual");
-        if (annual != null) {
-            lqw.eq(AssessAnnualRecommendTemp::getCurrentYear, annual.getCurrentYear());
+    public List<AssessAnnualRecommendTemp> getRecommendTempExl(String year) {
+        if (year == null || "0".equals(year)) {
+            AssessCurrentAssess annual = assessCommonApi.getCurrentAssessInfo("annual");
+            year = annual.getCurrentYear();
         }
+        LambdaQueryWrapper<AssessAnnualRecommendTemp> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessAnnualRecommendTemp::getCurrentYear, year);
 
         return tempMapper.selectList(lqw);
     }
@@ -2247,7 +2251,8 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         AssessAnnualSummary summary = summaryMapper.selectOne(lqw);
 
         if (summary == null) throw new JeecgBootException("考核信息不存在");
-        if (summary.getDepart().equals(targetDepart)) throw new JeecgBootException(CommonUtils.getNameByHashId(hashId) + "已是当前处室（单位），无需调整！");
+        if (summary.getDepart().equals(targetDepart))
+            throw new JeecgBootException(CommonUtils.getNameByHashId(hashId) + "已是当前处室（单位），无需调整！");
 
         summary.setDepart(targetDepart);
 
@@ -2316,7 +2321,7 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
     @Override
     public List<DepartResVO> getDepartRes(String year) {
         AssessCurrentAssess annual = assessCommonApi.getCurrentAssessInfo("annual");
-        if (annual == null){
+        if (annual == null) {
             throw new JeecgBootException("当前没有考核信息");
         }
 
@@ -2326,8 +2331,8 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();
         lqw.eq(AssessAnnualSummary::getDepart, departId);
 
-        if (year == null || annual.getCurrentYear().equals(year)){
-            if (annual.isAssessing()){
+        if (year == null || annual.getCurrentYear().equals(year)) {
+            if (annual.isAssessing()) {
                 throw new JeecgBootException("当前年度考核正在进行中，暂无结果。可在页面左上角查看其他年度考核结果！");
             } else {
                 lqw.eq(AssessAnnualSummary::getCurrentYear, annual.getCurrentYear());
@@ -2342,7 +2347,8 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         List<DepartResVO> res = new ArrayList<>();
         for (AssessAnnualSummary summary : list) {
             DepartResVO departResVO = new DepartResVO();
-            if ("group".equals(summary.getRecommendType())) departResVO.setName(currentUserDepart.get("departName") + "领导班子");
+            if ("group".equals(summary.getRecommendType()))
+                departResVO.setName(currentUserDepart.get("departName") + "领导班子");
             else departResVO.setName(summary.getPerson());
             departResVO.setName(summary.getPerson());
             departResVO.setDepart(currentUserDepart.get("departName"));

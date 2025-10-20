@@ -112,12 +112,14 @@ public class AssessRegularReportItem implements Serializable {
     @Excel(name = "第一季度", width = 15, dicCode = "regular_assess_level")
     @Dict(dicCode = "regular_assess_level")
     @ApiModelProperty(value = "第一季度")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     private String quarter1;
     /**
      * 第二季度
      */
     @Excel(name = "第二季度", width = 15, dicCode = "regular_assess_level")
     @Dict(dicCode = "regular_assess_level")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     @ApiModelProperty(value = "第二季度")
     private String quarter2;
     /**
@@ -125,6 +127,7 @@ public class AssessRegularReportItem implements Serializable {
      */
     @Excel(name = "第三季度", width = 15, dicCode = "regular_assess_level")
     @Dict(dicCode = "regular_assess_level")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     @ApiModelProperty(value = "第三季度")
     private String quarter3;
     /**
@@ -132,6 +135,7 @@ public class AssessRegularReportItem implements Serializable {
      */
     @Excel(name = "第四季度", width = 15, dicCode = "regular_assess_level")
     @Dict(dicCode = "regular_assess_level")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     @ApiModelProperty(value = "第四季度")
     private String quarter4;
     /**

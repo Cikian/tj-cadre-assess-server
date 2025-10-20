@@ -196,7 +196,7 @@ public class AssessAnnualExcellentNumController extends JeecgController<AssessAn
         String msg1 = "以上局机关领导干部、分局+参公、事业单位中不包含分管纪检工作领导，共" + num + "人；";
 
         List<AssessAssistConfig> assessAssistConfigs = assistConfigMapper.selectList(null);
-        List<SysUser> allLeader = userCommonApi.getAllLeader();
+        List<SysUser> allLeader = userCommonApi.getCurrentLeader();
         // 以id为k，name为v，allLeader转为map
         Map<String, String> leaderMap = allLeader.stream().collect(Collectors.toMap(SysUser::getId, SysUser::getRealname));
 

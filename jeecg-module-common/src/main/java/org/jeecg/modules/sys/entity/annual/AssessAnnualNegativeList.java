@@ -57,13 +57,14 @@ public class AssessAnnualNegativeList implements Serializable {
     @Dict(dictTable = "sys_depart", dicText = "alias", dicCode = "id")
     @ApiModelProperty(value = "单位")
     private String depart;
-
+    @Excel(name = "人员", width = 10)
+    private String person;
     /**年度*/
     @Excel(name = "年度", width = 10)
     @ApiModelProperty(value = "年度")
     private String currentYear;
 
-    private String person;
+
     private String hashId;
 
     /**填写单位*/

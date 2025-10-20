@@ -68,8 +68,18 @@ public class AssessAnnualExcellentNumServiceImpl extends ServiceImpl<AssessAnnua
         List<AssessLeaderRec> leaderRecs = leaderRecMapper.selectList(lqw3);
         //将id转为list
         List<String> recIds = leaderRecs.stream().map(AssessLeaderRec::getId).collect(Collectors.toList());
+
+        Map<String, String> leaderRecMap = leaderRecs.stream().collect(Collectors.toMap(
+                AssessLeaderRec::getLeader,
+                AssessLeaderRec::getId,
+                (existing, replacement) -> {
+                    System.out.println("Duplicate key found: " + existing);
+                    return existing;
+                }
+        ));
+
         // 以id为k，id2为v转换为map
-        Map<String, String> leaderRecMap = leaderRecs.stream().collect(Collectors.toMap(AssessLeaderRec::getLeader, AssessLeaderRec::getId));
+//        Map<String, String> leaderRecMap = leaderRecs.stream().collect(Collectors.toMap(AssessLeaderRec::getLeader, AssessLeaderRec::getId));
 
         LambdaQueryWrapper<AssessLeaderRecItem> lqw4 = new LambdaQueryWrapper<>();
         lqw4.in(AssessLeaderRecItem::getMainId, recIds);

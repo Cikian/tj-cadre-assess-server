@@ -66,7 +66,7 @@ public class AssessRegularResultController extends JeecgController<AssessRegular
 		Map<String, String[]> parameterMap = req.getParameterMap();
 		if (parameterMap.get("currentYear") == null){
 			AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("regular");
-			if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+			if (currentAssessInfo != null) {
 				queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
 			}
 		}

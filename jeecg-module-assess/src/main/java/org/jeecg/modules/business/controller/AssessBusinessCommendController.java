@@ -97,7 +97,7 @@ public class AssessBusinessCommendController extends JeecgController<AssessBusin
         Map<String, String[]> parameterMap = new HashMap<>(req.getParameterMap());
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("business");
         if (parameterMap.get("currentYear") == null) {
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
             }
         }
@@ -127,6 +127,9 @@ public class AssessBusinessCommendController extends JeecgController<AssessBusin
         }
 
         commendService.save(assessBusinessCommend);
+        if (userRolesById.contains("department_cadre_admin")){
+            assessBusinessGradeService.updateAddOrSubtractReason(assessBusinessCommend.getDepartmentCode(), assessBusinessCommend.getCurrentYear(), true);
+        }
         return Result.OK("添加成功！");
     }
 
@@ -214,7 +217,7 @@ public class AssessBusinessCommendController extends JeecgController<AssessBusin
     public void exportExcel(@RequestParam(name = "currentYear",defaultValue = "0") String currentYear, @Value("${server.port}") String port, HttpServletRequest request, HttpServletResponse response) {
         if (StringUtils.isBlank(currentYear)||"0".equals(currentYear)) {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("business");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 currentYear=currentAssessInfo.getCurrentYear();
             }
         }

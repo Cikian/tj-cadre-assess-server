@@ -295,7 +295,7 @@ public class AssessBusinessDepartFillServiceImpl extends ServiceImpl<AssessBusin
 
     @Override
     public BusinessIndexEmployee[] getPartial(String departId, AssessCurrentAssess assessInfo) {
-        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear())) {
+        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()) {
             return new BusinessIndexEmployee[]{new BusinessIndexEmployee("当前无正在进行的考核")};
         }
         // 创建查询条件，匹配 department_code 字段
@@ -451,12 +451,14 @@ public class AssessBusinessDepartFillServiceImpl extends ServiceImpl<AssessBusin
         LambdaUpdateWrapper<AssessBusinessCommend> luw = new LambdaUpdateWrapper<>();
         luw.eq(AssessBusinessCommend::getCurrentYear, needAuditAssess.getCurrentYear());
         luw.eq(AssessBusinessCommend::getDepartmentCode, reportDepart);
+        luw.ne(AssessBusinessCommend::getStatus, 3);
         luw.set(AssessBusinessCommend::getStatus, 2);
         commendMapper.update(null, luw);
 
         LambdaUpdateWrapper<AssessBusinessDenounce> luw2 = new LambdaUpdateWrapper<>();
         luw2.eq(AssessBusinessDenounce::getCurrentYear, needAuditAssess.getCurrentYear());
         luw2.eq(AssessBusinessDenounce::getDepartmentCode, reportDepart);
+        luw2.ne(AssessBusinessDenounce::getStatus, 3);
         luw2.set(AssessBusinessDenounce::getStatus, 2);
         denounceMapper.update(null, luw2);
 

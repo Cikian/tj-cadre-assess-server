@@ -257,7 +257,7 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
 
     @Override
     public Map<String, BigDecimal> getProportionCount(String year, String type) {
-        if (type.equals("undefined")){
+        if (type.equals("undefined")) {
             type = "1";
         }
         List<String> typeList = new ArrayList<>();
@@ -340,16 +340,16 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
         }
         AssessBusinessDepartGradeDTO departReportQuery = gradeMapper.getDepartReportQuery(currentYear, departId);
 
-        Map<String,String>  itemReasonMap = this.getItemReason(departId, currentYear);
+        Map<String, String> itemReasonMap = this.getItemReason(departId, currentYear);
         // 合并考核项原因，加入换行符
         int index = 1;
         StringBuilder reason = new StringBuilder();
         for (String reportDepart : itemReasonMap.keySet()) {
-            String data=itemReasonMap.get(reportDepart);
-            if ("1".equals(exportDepart)){
-                String departName=departCommonApi.queryDepartById(reportDepart).getDepartName();
+            String data = itemReasonMap.get(reportDepart);
+            if ("1".equals(exportDepart)) {
+                String departName = departCommonApi.queryDepartById(reportDepart).getDepartName();
                 reason.append(index).append("、").append(departName).append("：").append(data).append("\n");
-            }else {
+            } else {
                 reason.append(index).append("、").append(data).append("\n");
             }
             index++;
@@ -637,13 +637,13 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
     }
 
     @Override
-    public List<AssessBusinessGrade> getGradeListByType(String departType,String year) {
-        return this.selectByDepartType(departType,year);
+    public List<AssessBusinessGrade> getGradeListByType(String departType, String year) {
+        return this.selectByDepartType(departType, year);
     }
 
     @Override
-    public List<AssessBusinessGrade> getGradeListByTypeNotEqualTo(String departType,String year) {
-        return gradeMapper.selectByDepartTypeNotEqualTo(departType,year);
+    public List<AssessBusinessGrade> getGradeListByTypeNotEqualTo(String departType, String year) {
+        return gradeMapper.selectByDepartTypeNotEqualTo(departType, year);
     }
 
     @Override
@@ -668,7 +668,7 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
     }
 
     @Override
-    public List<AssessBusinessGrade> selectByDepartType(String departType,String year) {
+    public List<AssessBusinessGrade> selectByDepartType(String departType, String year) {
         LambdaQueryWrapper<AssessBusinessGrade> lambdaQueryWrapper = new LambdaQueryWrapper<>();
         lambdaQueryWrapper.isNotNull(AssessBusinessGrade::getDepartType).eq(AssessBusinessGrade::getDepartType, departType).eq(AssessBusinessGrade::getCurrentYear, year);
         return this.list(lambdaQueryWrapper);
@@ -682,62 +682,60 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
         LambdaQueryWrapper<AssessBusinessGrade> lambdaQueryWrapper = new LambdaQueryWrapper<>();
         lambdaQueryWrapper.eq(AssessBusinessGrade::getDepartId, departId).eq(AssessBusinessGrade::getCurrentYear, year);
         List<AssessBusinessGrade> list = this.list(lambdaQueryWrapper);
-        if (list.size() == 0) {
+        if (list.isEmpty()) {
             return false;
         }
-        if (isAdd) {
-            LambdaQueryWrapper<AssessBusinessCommend> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(AssessBusinessCommend::getDepartmentCode, departId).eq(AssessBusinessCommend::getCurrentYear, year).eq(AssessBusinessCommend::getStatus, 3);// 查询本年度采纳的表彰
-            List<AssessBusinessCommend> commendList = assessBusinessCommendService.list(wrapper);
-            String str = "";
-            for (AssessBusinessCommend commend :
-                    commendList) {
-                str += commend.getRemark();
-            }
-            for (AssessBusinessGrade grade :
-                    list) {
-                grade.setAddReason(str);
-                this.updateById(grade);
-            }
-        } else {
-            LambdaQueryWrapper<AssessBusinessDenounce> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(AssessBusinessDenounce::getDepartmentCode, departId).eq(AssessBusinessDenounce::getCurrentYear, year).eq(AssessBusinessDenounce::getStatus, 3);// 查询本年度采纳的表彰
-            List<AssessBusinessDenounce> denounceList = assessBusinessDenounceService.list(wrapper);
-            String str = "";
-            for (AssessBusinessDenounce denounce :
-                    denounceList) {
-                str += denounce.getRemark();
-            }
-            for (AssessBusinessGrade grade :
-                    list) {
-                grade.setSubtractReason(str);
-                this.updateById(grade);
-            }
+        AssessBusinessGrade grade = list.get(0);
+
+        LambdaQueryWrapper<AssessBusinessCommend> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AssessBusinessCommend::getDepartmentCode, departId).eq(AssessBusinessCommend::getCurrentYear, year);
+        wrapper.eq(AssessBusinessCommend::getStatus, 3);
+        List<AssessBusinessCommend> commendList = assessBusinessCommendService.list(wrapper);
+
+        String str = "";
+        for (AssessBusinessCommend commend :
+                commendList) {
+            str += commend.getRemark();
         }
+        grade.setAddReason(str);
+
+        LambdaQueryWrapper<AssessBusinessDenounce> wrapper2 = new LambdaQueryWrapper<>();
+        wrapper2.eq(AssessBusinessDenounce::getDepartmentCode, departId).eq(AssessBusinessDenounce::getCurrentYear, year);
+        wrapper2.eq(AssessBusinessDenounce::getStatus, 3);
+        List<AssessBusinessDenounce> denounceList = assessBusinessDenounceService.list(wrapper2);
+
+        String str2 = "";
+        for (AssessBusinessDenounce denounce :
+                denounceList) {
+            str2 += denounce.getRemark();
+        }
+        grade.setSubtractReason(str2);
+
+        this.updateById(grade);
         return true;
     }
 
     @Override
     public Map<String, String> getItemReason(String departId, String year) {
-        Map<String, String> map=new LinkedHashMap<>();
+        Map<String, String> map = new LinkedHashMap<>();
         LambdaQueryWrapper<AssessBusinessGrade> lambdaQueryWrapper = new LambdaQueryWrapper<>();
         lambdaQueryWrapper.eq(AssessBusinessGrade::getCurrentYear, year).eq(AssessBusinessGrade::getDepartId, departId);
-        List<AssessBusinessGrade> list=this.list(lambdaQueryWrapper);
-        if (list.size()==0){
+        List<AssessBusinessGrade> list = this.list(lambdaQueryWrapper);
+        if (list.size() == 0) {
             return map;
         }
-        AssessBusinessGrade assessBusinessGrade=list.get(0);
+        AssessBusinessGrade assessBusinessGrade = list.get(0);
         LambdaQueryWrapper<AssessBusinessFillItem> lambdaFillItemWrapper = new LambdaQueryWrapper<>();
         lambdaFillItemWrapper.eq(AssessBusinessFillItem::getGatherId, assessBusinessGrade.getId());
-        List<AssessBusinessFillItem> fillList=itemMapper.selectList(lambdaFillItemWrapper);
-        for (AssessBusinessFillItem assessBusinessFillItem:
+        List<AssessBusinessFillItem> fillList = itemMapper.selectList(lambdaFillItemWrapper);
+        for (AssessBusinessFillItem assessBusinessFillItem :
                 fillList) {
-            String reportDepartId=assessBusinessFillItem.getReportDepart();
-            String reason=assessBusinessFillItem.getReasonOfDeduction();
-            if (StringUtils.isBlank(reason)){
+            String reportDepartId = assessBusinessFillItem.getReportDepart();
+            String reason = assessBusinessFillItem.getReasonOfDeduction();
+            if (StringUtils.isBlank(reason)) {
                 continue;
             }
-            map.put(reportDepartId,reason);
+            map.put(reportDepartId, reason);
         }
         return map;
     }

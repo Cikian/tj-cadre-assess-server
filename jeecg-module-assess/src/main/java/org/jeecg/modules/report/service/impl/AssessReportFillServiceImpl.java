@@ -247,7 +247,7 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
 
     @Override
     public ReportIndexEmployee[] getPartial(String departId, AssessCurrentAssess assessInfo) {
-        if (assessInfo==null|| StringUtils.isBlank(assessInfo.getCurrentYear())){
+        if (assessInfo==null|| StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()){
             return new ReportIndexEmployee[]{new ReportIndexEmployee("当前无正在进行的考核")};
         }
 

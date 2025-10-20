@@ -110,7 +110,7 @@ public class AssessBusinessGradeController extends JeecgController<AssessBusines
         Map<String, String[]> parameterMap = req.getParameterMap();
         if (parameterMap.get("currentYear") == null) {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("business");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
             }
         }
@@ -141,7 +141,7 @@ public class AssessBusinessGradeController extends JeecgController<AssessBusines
         Map<String, String[]> parameterMap = req.getParameterMap();
         if (parameterMap.get("currentYear") == null) {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("business");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
             }
         }

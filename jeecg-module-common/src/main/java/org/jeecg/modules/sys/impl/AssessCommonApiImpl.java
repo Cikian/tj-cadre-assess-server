@@ -36,11 +36,10 @@ import org.jeecg.modules.sys.mapper.business.AssessBusinessDepartFillMapper;
 import org.jeecg.modules.sys.mapper.business.AssessLeaderDepartConfigMapper;
 import org.jeecg.modules.sys.mapper.report.AssessReportFillMapper;
 import org.jeecg.modules.sys.vo.DemocraticFillListVO;
-import org.jeecg.modules.system.entity.SysCategory;
-import org.jeecg.modules.system.entity.SysDepart;
-import org.jeecg.modules.system.entity.SysDictItem;
-import org.jeecg.modules.system.entity.SysUser;
+import org.jeecg.modules.system.entity.*;
 import org.jeecg.modules.system.mapper.SysDepartMapper;
+import org.jeecg.modules.system.mapper.SysRoleMapper;
+import org.jeecg.modules.system.mapper.SysUserRoleMapper;
 import org.jeecg.modules.user.UserCommonApi;
 import org.jeecgframework.poi.excel.ExcelImportUtil;
 import org.jeecgframework.poi.excel.entity.ImportParams;
@@ -114,6 +113,11 @@ public class AssessCommonApiImpl implements AssessCommonApi {
     private DepartCommonApi departCommonApi;
     @Autowired
     private LeaderDepartHistoryMapper ldhMapper;
+    @Autowired
+    private SysRoleMapper roleMapper;
+    @Autowired
+    private SysUserRoleMapper userRoleMapper;
+
 
     // 定义评估类型枚举
     private enum AssessType {
@@ -953,8 +957,9 @@ public class AssessCommonApiImpl implements AssessCommonApi {
             ldh.setAssessYear(year);
             ldh.setDepartId(config.getDepartId());
             ldh.setLeaderId(config.getLeaderId());
-            ldh.setUsername(leaderMap.get(config.getLeaderId()).getUsername());
-            ldh.setRealname(leaderMap.get(config.getLeaderId()).getRealname());
+            SysUser sysUser = leaderMap.get(config.getLeaderId());
+            ldh.setUsername(sysUser == null ? "" : sysUser.getUsername());
+            ldh.setRealname(sysUser == null ? "" : sysUser.getRealname());
             ldhMapper.insert(ldh);
         }
     }

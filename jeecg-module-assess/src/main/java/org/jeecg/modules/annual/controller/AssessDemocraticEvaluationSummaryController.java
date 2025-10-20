@@ -254,7 +254,7 @@ public class AssessDemocraticEvaluationSummaryController {
             lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, parameterMap.get("currentYear")[0]);
         } else {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
             }
         }
@@ -287,9 +287,23 @@ public class AssessDemocraticEvaluationSummaryController {
         Map<String, String[]> parameterMap = req.getParameterMap();
         String desc4Excel = getDesc4Excel(parameterMap);
 
-        Result<IPage<AssessDemocraticEvaluationSummary>> iPageResult = this.queryPageList4Pro(params, endYear, req);
-        IPage<AssessDemocraticEvaluationSummary> result = iPageResult.getResult();
-        List<AssessDemocraticEvaluationSummary> data = result.getRecords();
+        List<AssessDemocraticEvaluationSummary> data = new ArrayList<>();
+
+        Result<IPage<AssessDemocraticEvaluationSummary>> iPageResult = this.queryPageList4Pro(params, startYear, req);
+
+        IPage<AssessDemocraticEvaluationSummary> result1 = iPageResult.getResult();
+        if (result1 != null) {
+            data = result1.getRecords();
+        }
+
+        if (data.isEmpty()){
+            Result<IPage<AssessDemocraticEvaluationSummary>> iPageResul = this.queryPageList4Pro(params, endYear, req);
+            IPage<AssessDemocraticEvaluationSummary> result = iPageResul.getResult();
+            if (result != null) {
+                data = result.getRecords();
+            }
+        }
+
 
         List<JSONObject> resData = new ArrayList<>();
 
@@ -474,6 +488,12 @@ public class AssessDemocraticEvaluationSummaryController {
         if (Boolean.TRUE.equals(trial)) {
             List<AssessTrialPeople> trials = trialService.list();
             if (trials != null && !trials.isEmpty()) {
+
+                if (startYear == null || "0".equals(startYear)) {
+                    AssessCurrentAssess annual = assessCommonApi.getCurrentAssessInfo("annual");
+                    startYear = annual.getCurrentYear();
+                }
+
                 // 将hashId取出组合成List
                 LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
                 List<String> trialIds = trials.stream().map(AssessTrialPeople::getHashId).collect(Collectors.toList());
@@ -1688,11 +1708,11 @@ public class AssessDemocraticEvaluationSummaryController {
         textMap.put("${text_1}", text);
         textMap.put("${desc}", desc);
 
-        textMap.put("${p_name}", peopleInfo.get("name"));
-        textMap.put("${depart_type}", peopleInfo.get("departType"));
-        textMap.put("${p_depart}", peopleInfo.get("depart"));
-        textMap.put("${p_type}", peopleInfo.get("type"));
-        textMap.put("${p_unit}", peopleInfo.get("unit"));
+        textMap.put("${p_name}", peopleInfo.get("name") == null ? "" : peopleInfo.get("name"));
+        textMap.put("${depart_type}", peopleInfo.get("departType") == null ? "" : peopleInfo.get("departType"));
+        textMap.put("${p_depart}", peopleInfo.get("depart") == null ? "" : peopleInfo.get("depart"));
+        textMap.put("${p_type}", peopleInfo.get("type") == null ? "" : peopleInfo.get("type"));
+        textMap.put("${p_unit}", peopleInfo.get("unit") == null ? "" : peopleInfo.get("unit"));
         textMap.put("${time}", new SimpleDateFormat("yyyy年MM月dd日 HH:mm:ss").format(new Date()));
 
         ExcelTemplateUtils.replaceText(sheet, textMap);

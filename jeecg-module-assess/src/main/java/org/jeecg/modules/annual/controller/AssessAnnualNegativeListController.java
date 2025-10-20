@@ -69,7 +69,7 @@ public class AssessAnnualNegativeListController extends JeecgController<AssessAn
 		Map<String, String[]> parameterMap = new HashMap<>(req.getParameterMap());
 		AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
 		if (parameterMap.get("currentYear") == null) {
-			if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+			if (currentAssessInfo != null) {
 				queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
 			}
 		}

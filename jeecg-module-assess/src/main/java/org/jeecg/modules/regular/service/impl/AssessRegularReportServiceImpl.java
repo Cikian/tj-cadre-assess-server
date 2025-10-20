@@ -479,7 +479,7 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
     @Override
     public RegularIndexEmployee[] getPartial(String departName, AssessCurrentAssess assessInfo) {
 
-        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear())) {
+        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()) {
             return new RegularIndexEmployee[]{new RegularIndexEmployee("当前无正在进行的考核")};
         }
 

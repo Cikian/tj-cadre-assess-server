@@ -92,7 +92,7 @@ public class AssessReportFillController extends JeecgController<AssessReportFill
         Map<String, String[]> parameterMap = req.getParameterMap();
         if (parameterMap.get("currentYear") == null){
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
-            if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+            if (currentAssessInfo != null) {
                 queryWrapper.eq("current_year", currentAssessInfo.getCurrentYear());
             }
         }
