@@ -420,6 +420,9 @@ public class AssessCommonController {
     @GetMapping("/canFillNegative")
     public Result<Boolean> canFillNegative() {
         Map<String, String> currentUserDepart = departCommonApi.getCurrentUserDepart();
+        if (currentUserDepart == null) {
+            return Result.ok(false);
+        }
         String departId = currentUserDepart.get("departId");
         List<AssessNegativeDepart> assessNegativeDeparts = negativeDepartMapper.selectList(null);
         StringBuilder departIds = new StringBuilder();

@@ -334,6 +334,10 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
                 .map(AssessRegularReportItem::getId)
                 .collect(Collectors.toList());
 
+        if (idsToDelete.isEmpty()) {
+            return;
+        }
+
         LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
         luw.in(AssessRegularReportItem::getId, idsToDelete);
         luw.set(AssessRegularReportItem::getDelFlag, 1);
