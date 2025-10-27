@@ -187,7 +187,6 @@ public class AssessDemocraticEvaluationServiceImpl extends ServiceImpl<AssessDem
                     qw.orderByDesc(AssessDemocraticEvaluationSummary::getType);
                     List<AssessDemocraticEvaluationSummary> s = summaryMapper.selectList(qw);
                     qw.clear();
-
                     if (s != null && !s.isEmpty()) {
                         summaries.addAll(s);
                     }
@@ -232,7 +231,11 @@ public class AssessDemocraticEvaluationServiceImpl extends ServiceImpl<AssessDem
         // 封装返回数据
         if (summaries != null && !summaries.isEmpty()) {
             List<DemocraticFillListVO> list = new ArrayList<>();
+            Set<String> allIds = new HashSet<>();
             for (AssessDemocraticEvaluationSummary summary : summaries) {
+                if (allIds.contains(summary.getId())) {
+                    continue;
+                }
                 DemocraticFillListVO vo = new DemocraticFillListVO();
                 vo.setAppraisee(summary.getAppraisee());
                 vo.setDepartId(summary.getDepart());
@@ -243,6 +246,7 @@ public class AssessDemocraticEvaluationServiceImpl extends ServiceImpl<AssessDem
                 vo.setCurrentYear(summary.getCurrentYear());
                 list.add(vo);
                 allPeople.add(summary.getAppraisee());
+                allIds.add(summary.getId());
             }
 
             LambdaQueryWrapper<AssessAnnualSummary> lqw = new LambdaQueryWrapper<>();

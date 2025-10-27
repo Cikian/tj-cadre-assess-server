@@ -3,6 +3,7 @@ package org.jeecg.modules.annual.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.Synchronized;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
@@ -12,14 +13,13 @@ import org.jeecg.common.system.vo.SysDepartModel;
 import org.jeecg.modules.annual.dto.Dem4jjGradeDTO;
 import org.jeecg.modules.annual.dto.DemGradeDTO;
 import org.jeecg.modules.annual.dto.DemGradeItemsDTO;
-import org.jeecg.modules.annual.service.IAssessAnnualFillService;
-import org.jeecg.modules.annual.vo.DepartProgressVO;
-import org.jeecg.modules.annual.vo.LeaderProgressVO;
-import org.jeecg.modules.sys.AssessCommonApi;
-import org.jeecg.modules.sys.dto.DemocraticInitDTO;
 import org.jeecg.modules.annual.service.IAssessAnnualDemocraticConfigService;
 import org.jeecg.modules.annual.service.IAssessDemocraticEvaluationSummaryService;
+import org.jeecg.modules.annual.vo.DepartProgressVO;
+import org.jeecg.modules.annual.vo.LeaderProgressVO;
 import org.jeecg.modules.depart.DepartCommonApi;
+import org.jeecg.modules.sys.AssessCommonApi;
+import org.jeecg.modules.sys.dto.DemocraticInitDTO;
 import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.annual.*;
 import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
@@ -29,9 +29,8 @@ import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.system.mapper.SysUserMapper;
 import org.jeecg.modules.user.UserCommonApi;
 import org.jeecg.modules.utils.CommonUtils;
-import org.springframework.stereotype.Service;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.Serializable;
@@ -1144,8 +1143,13 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
 
         List<AssessAnnualDemocraticConfig> lastVersionConfigs = democraticConfigService.getLastVersions();
         // type为key，AssessAnnualDemocraticConfig为value转为map
-        Map<String, AssessAnnualDemocraticConfig> configMap = lastVersionConfigs.stream().collect(Collectors.toMap(AssessAnnualDemocraticConfig::getType, Function.identity()));
-
+        // 保留第一个遇到的元素
+        Map<String, AssessAnnualDemocraticConfig> configMap = lastVersionConfigs.stream()
+                .collect(Collectors.toMap(
+                        AssessAnnualDemocraticConfig::getType,
+                        Function.identity(),
+                        (existing, replacement) -> existing  // 如果 key 冲突，保留已存在的值
+                ));
         List<AssessDemocraticEvaluationSummary> list = democraticSummaryMapper.selectList(lqw);
 
         if (leader != null && !leader.isEmpty() && !"0".equals(leader)) {
@@ -1172,9 +1176,11 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
         List<AssessDemocraticEvaluation> decBySummaryIds = this.getDecBySummaryIds(summaryIds);
 
         List<String> decIds = decBySummaryIds.stream().map(AssessDemocraticEvaluation::getId).collect(Collectors.toList());
+        List<AssessDemocraticEvaluationItem> items = new ArrayList<>();
 
-        List<AssessDemocraticEvaluationItem> items = this.getDecItemsByDecIds(decIds);
-
+        if (decIds != null && !decIds.isEmpty()) {
+            items = this.getDecItemsByDecIds(decIds);
+        }
         List<SysDepartModel> departs = departCommonApi.queryAllDepart();
         // 转为map，id为k，departName为V
         Map<String, String> departMap = departs.stream().collect(Collectors.toMap(SysDepartModel::getId, SysDepartModel::getDepartName));
@@ -1327,8 +1333,12 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
         // 获取加权的配置
         List<AssessAnnualDemocraticConfig> lastVersionConfigs = democraticConfigService.getLastVersions();
         // type为key，AssessAnnualDemocraticConfig为value转为map
-        Map<String, AssessAnnualDemocraticConfig> configMap = lastVersionConfigs.stream().collect(Collectors.toMap(AssessAnnualDemocraticConfig::getType, Function.identity()));
-
+        Map<String, AssessAnnualDemocraticConfig> configMap = lastVersionConfigs.stream()
+                .collect(Collectors.toMap(
+                        AssessAnnualDemocraticConfig::getType,
+                        Function.identity(),
+                        (existing, replacement) -> existing  // 如果 key 冲突，保留已存在的值
+                ));
         List<DemGradeItemsDTO> res = new ArrayList<>();
 
         int no = 1;
@@ -1965,12 +1975,18 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
     }
 
     private List<AssessDemocraticEvaluation> getDecBySummaryIds(List<String> summaryId) {
+        if (summaryId == null || summaryId.isEmpty()) {
+            return Collections.emptyList();
+        }
         LambdaQueryWrapper<AssessDemocraticEvaluation> lqw = new LambdaQueryWrapper<>();
         lqw.in(AssessDemocraticEvaluation::getEvaluationSummaryId, summaryId);
         return democraticEvaluationMapper.selectList(lqw);
     }
 
     private List<AssessDemocraticEvaluationItem> getDecItemsByDecIds(List<String> decIds) {
+        if (decIds == null || decIds.isEmpty()) {
+            return Collections.emptyList();
+        }
         LambdaQueryWrapper<AssessDemocraticEvaluationItem> lqw = new LambdaQueryWrapper<>();
         lqw.in(AssessDemocraticEvaluationItem::getDemocraticId, decIds);
         return itemMapper.selectList(lqw);
