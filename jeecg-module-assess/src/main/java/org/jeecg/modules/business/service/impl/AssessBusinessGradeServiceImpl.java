@@ -261,7 +261,7 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
             type = "1";
         }
         List<String> typeList = new ArrayList<>();
-        if (type.equals("1") || type.equals("2")) {
+        if ("1".equals(type) || "2".equals(type)) {
             typeList.add(type);
         } else {
             typeList.add("3");
@@ -411,7 +411,7 @@ public class AssessBusinessGradeServiceImpl extends ServiceImpl<AssessBusinessGr
             for (String departType : departTypeList) {
                 LambdaQueryWrapper<AssessBusinessGrade> lqw = new LambdaQueryWrapper<>();
                 lqw.eq(AssessBusinessGrade::getCurrentYear, currentAssessInfo.getCurrentYear());
-                if (departType.equals("3,4")) {
+                if ("3,4".equals(departType)) {
                     String[] split = departType.split(",");
                     lqw.in(AssessBusinessGrade::getDepartType, split);
                 } else {

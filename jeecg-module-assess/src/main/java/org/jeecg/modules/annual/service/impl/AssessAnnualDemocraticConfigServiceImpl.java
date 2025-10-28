@@ -36,6 +36,12 @@ public class AssessAnnualDemocraticConfigServiceImpl extends ServiceImpl<AssessA
         BigDecimal weightB = democraticConfig.getWeightB();
         BigDecimal weightC = democraticConfig.getWeightC();
 //        BigDecimal weightD = democraticConfig.getWeightD();
+
+        // 如果和不为100，提示
+        if (weightA.add(weightB).add(weightC).compareTo(new BigDecimal(100)) != 0) {
+            throw new RuntimeException("权重和不为100%！");
+        }
+
         // 除以100，保留两位小数
         democraticConfig.setWeightA(weightA.divide(new BigDecimal(100), 2, RoundingMode.HALF_UP));
         democraticConfig.setWeightB(weightB.divide(new BigDecimal(100), 2, RoundingMode.HALF_UP));
@@ -44,7 +50,15 @@ public class AssessAnnualDemocraticConfigServiceImpl extends ServiceImpl<AssessA
 
         democraticConfigMapper.insert(democraticConfig);
 
-        if (assessAnnualDemocraticItemList != null && assessAnnualDemocraticItemList.size() > 0) {
+        BigDecimal tem = new BigDecimal(0);
+        for (AssessAnnualDemocraticItem entity : assessAnnualDemocraticItemList){
+            tem = tem.add(entity.getScore());
+        }
+        if (tem.compareTo(new BigDecimal(100)) != 0) {
+            throw new RuntimeException("分数和不为100！");
+        }
+
+        if (!assessAnnualDemocraticItemList.isEmpty()) {
             for (AssessAnnualDemocraticItem entity : assessAnnualDemocraticItemList) {
                 //外键设置
                 entity.setConfigId(democraticConfig.getId());
@@ -60,6 +74,11 @@ public class AssessAnnualDemocraticConfigServiceImpl extends ServiceImpl<AssessA
         BigDecimal weightB = democraticConfig.getWeightB();
         BigDecimal weightC = democraticConfig.getWeightC();
 //        BigDecimal weightD = democraticConfig.getWeightD();
+
+        if (weightA.add(weightB).add(weightC).compareTo(new BigDecimal(100)) != 0) {
+            throw new RuntimeException("权重和不为100%！");
+        }
+
         // 除以100，保留两位小数
         democraticConfig.setWeightA(weightA.divide(new BigDecimal(100), 2, RoundingMode.HALF_UP));
         democraticConfig.setWeightB(weightB.divide(new BigDecimal(100), 2, RoundingMode.HALF_UP));
@@ -71,8 +90,16 @@ public class AssessAnnualDemocraticConfigServiceImpl extends ServiceImpl<AssessA
         //1.先删除子表数据
         democraticItemMapper.deleteByMainId(democraticConfig.getId());
 
+        BigDecimal tem = new BigDecimal(0);
+        for (AssessAnnualDemocraticItem entity : assessAnnualDemocraticItemList){
+            tem = tem.add(entity.getScore());
+        }
+        if (tem.compareTo(new BigDecimal(100)) != 0) {
+            throw new RuntimeException("分数和不为100！");
+        }
+
         //2.子表数据重新插入
-        if (assessAnnualDemocraticItemList != null && assessAnnualDemocraticItemList.size() > 0) {
+        if (!assessAnnualDemocraticItemList.isEmpty()) {
             for (AssessAnnualDemocraticItem entity : assessAnnualDemocraticItemList) {
                 //外键设置
                 entity.setConfigId(democraticConfig.getId());

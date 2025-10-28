@@ -1059,6 +1059,29 @@ public class UserCommonApiImpl extends ServiceImpl<SysUserDepartMapper, SysUserD
         return res;
     }
 
+    @Override
+    public List<String> getAssessUnitDepart(String year, String leader) {
+        AssessCurrentAssess assess = assessCommonApi.getCurrentAssessInfo("annual");
+        if (assess == null) {
+            return new ArrayList<>();
+        }
+
+        List<String> res = new ArrayList<>();
+
+        if (year.equals(assess.getCurrentYear())) {
+            LambdaQueryWrapper<AssessLeaderDepartConfig> lqw2 = new LambdaQueryWrapper<>();
+            lqw2.eq(AssessLeaderDepartConfig::getLeaderId, leader);
+            List<AssessLeaderDepartConfig> configs = leaderDepartConfigMapper.selectList(lqw2);
+            for (AssessLeaderDepartConfig c : configs) {
+                res.addAll(Arrays.asList(c.getDepartId().split(",")));
+            }
+        } else {
+            List<String> historyUnitDeptIds = this.getHistoryUnitDeptIds(Collections.singletonList(leader), year);
+            res.addAll(historyUnitDeptIds);
+        }
+
+        return res;
+    }
 
 
     @Override

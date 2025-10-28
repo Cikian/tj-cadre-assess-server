@@ -556,13 +556,24 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
                 LambdaUpdateWrapper<AssessRegularReport> luw = new LambdaUpdateWrapper<>();
                 luw.eq(AssessRegularReport::getCurrentYear, currentAssessInfo.getCurrentYear());
                 luw.set(AssessRegularReport::getCurrentQuarter, String.valueOf(currentQuarter - 1));
+                luw.set(AssessRegularReport::getStatus, "3");
+                luw.set(AssessRegularReport::getAssessName,currentAssessInfo.getCurrentYear()
+                        + "年第"
+                        + (currentQuarter - 1)
+                        + "季度平时考核");
                 reportMapper.update(null, luw);
 
                 LambdaUpdateWrapper<AssessRegularReportItem> luw2 = new LambdaUpdateWrapper<>();
                 luw2.eq(AssessRegularReportItem::getCurrentYear, currentAssessInfo.getCurrentYear());
-                luw2.set(AssessRegularReportItem::getQuarter2, null);
-                luw2.set(AssessRegularReportItem::getQuarter3, null);
-                luw2.set(AssessRegularReportItem::getQuarter4, null);
+
+                if (currentQuarter == 2) {
+                    luw2.set(AssessRegularReportItem::getQuarter2, null);
+                } else if (currentQuarter == 3) {
+                    luw2.set(AssessRegularReportItem::getQuarter3, null);
+                } else if (currentQuarter == 4) {
+                    luw2.set(AssessRegularReportItem::getQuarter4, null);
+                }
+
                 itemMapper.update(null, luw2);
             }
             // 调用API撤销当前年份

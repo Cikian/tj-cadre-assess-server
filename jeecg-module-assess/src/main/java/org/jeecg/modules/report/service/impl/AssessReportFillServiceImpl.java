@@ -63,6 +63,8 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
     private ISysUserService sysUserService;
     @Autowired
     private UserCommonApi userCommonApi;
+    @Autowired
+    private AssessReportEvaluationSummaryMapper evaluationSummaryMapper;
 
 
     @Override
@@ -307,6 +309,14 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
 
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
         if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
+
+            LambdaQueryWrapper<AssessReportEvaluationSummary> lqwE = new LambdaQueryWrapper<>();
+            lqwE.eq(AssessReportEvaluationSummary::getCurrentYear, currentAssessInfo.getCurrentYear());
+            List<AssessReportEvaluationSummary> assessReportEvaluationSummaries = evaluationSummaryMapper.selectList(lqwE);
+            if (!assessReportEvaluationSummaries.isEmpty()) {
+                throw new JeecgBootException("民主测评已经发起，无法撤销！\n如需帮助，请联系：星际空间（天津）科技发展有限公司！");
+            }
+
             currentAssessInfo.setAssessing(false);
 
             LambdaQueryWrapper<AssessReportFill> lqw = new LambdaQueryWrapper<>();
@@ -332,6 +342,8 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
             newLeaderMapper.delete(lqw4);
 
             assessCommonApi.revocationCurrentYear(currentAssessInfo);
+        } else {
+            throw new JeecgBootException("当前无正在进行的考核");
         }
 
     }
@@ -340,45 +352,6 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
     public void stopDem() {
         AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
         if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
-
-            // 年度考核进度归档
-            // LambdaQueryWrapper<SysUser> lqw = new LambdaQueryWrapper<>();
-            // lqw.isNotNull(SysUser::getPwdPlainText);
-            // lqw.eq(SysUser::getAssess, "report");
-            // List<SysUser> users = sysUserService.list(lqw);
-
-            // if (users != null && !users.isEmpty()) {
-            //
-            //     List<String> departIds = users.stream().map(SysUser::getDepart).collect(Collectors.toList());
-            //
-            //     LambdaQueryWrapper<AssessAnnualFill> lqw2 = new LambdaQueryWrapper<>();
-            //     lqw2.in(AssessAnnualFill::getDepart, departIds);
-            //     lqw2.eq(AssessAnnualFill::getCurrentYear, currentAssessInfo.getCurrentYear());
-            //
-            //     List<AssessAnnualFill> fills = annualFillMapper.selectList(lqw2);
-            //     // 去除所有fillId
-            //     List<String> fillIds = fills.stream().map(AssessAnnualFill::getId).collect(Collectors.toList());
-            //
-            //     LambdaQueryWrapper<AssessAnnualArrange> lqw3 = new LambdaQueryWrapper<>();
-            //     lqw3.in(AssessAnnualArrange::getAnnualFillId, fillIds);
-            //     List<AssessAnnualArrange> arrangeList = arrangeMapper.selectList(lqw3);
-            //
-            //     if (arrangeList != null && !arrangeList.isEmpty()) {
-            //         for (AssessAnnualArrange arrange : arrangeList) {
-            //             // 找到对应的fill
-            //             AssessAnnualFill fill = fills.stream().filter(f -> f.getId().equals(arrange.getAnnualFillId())).findFirst().orElse(null);
-            //             if (fill != null) {
-            //                 // 通过找到的fill的depart找到所有的user
-            //                 List<SysUser> user = users.stream().filter(u -> u.getDepart().equals(fill.getDepart())).collect(Collectors.toList());
-            //                 if (!user.isEmpty()) {
-            //                     arrange.setRecommend(String.valueOf(arrange.getVoteNum() - user.size()));
-            //                     arrangeMapper.updateById(arrange);
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-
             // 删除剩余的匿名账号
             userCommonApi.deleteAllAnonymousAccount("report");
         }

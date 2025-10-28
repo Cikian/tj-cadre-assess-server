@@ -883,6 +883,15 @@ public class AssessDemocraticEvaluationSummaryController {
                 year = currentAssessInfo.getCurrentYear();
             }
         }
+
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, year);
+
+        List<AssessDemocraticEvaluationSummary> summaryLists = democraticSummaryService.list(lqw);
+        if (summaryLists == null || summaryLists.isEmpty()) {
+            return Result.error("目前不存在进行中的年度考核民主测评，可在页面上方搜索其他年度查看。");
+        }
+
         List<DepartProgressVO> progress = democraticSummaryService.getDepartProgressByYear(year);
         IPage<DepartProgressVO> page = new Page<>();
         page.setRecords(progress);
@@ -936,7 +945,7 @@ public class AssessDemocraticEvaluationSummaryController {
             leaderMap.put(user.getId(), user.getRealname());
             for (int i = 0; i < 5; i++) {
                 JSONObject queryParam = new JSONObject();
-                queryParam.put("currentYear", currentYear);
+                queryParam.put("year", currentYear);
                 queryParam.put("leader", leader == null ? "0" : leader);
                 Map<String, Object> param = new JSONObject();
 
@@ -967,7 +976,7 @@ public class AssessDemocraticEvaluationSummaryController {
 
             for (int i = 0; i < 5; i++) {
                 JSONObject queryParam = new JSONObject();
-                queryParam.put("currentYear", currentYear);
+                queryParam.put("year", currentYear);
                 queryParam.put("leader", leader == null ? "0" : leader);
                 Map<String, Object> param = new JSONObject();
 
@@ -1004,7 +1013,7 @@ public class AssessDemocraticEvaluationSummaryController {
 
         for (int i = 0; i < 5; i++) {
             JSONObject queryParam = new JSONObject();
-            queryParam.put("currentYear", currentYear);
+            queryParam.put("year", currentYear);
             queryParam.put("leader", "0");
             Map<String, Object> param = new JSONObject();
 
@@ -1035,7 +1044,7 @@ public class AssessDemocraticEvaluationSummaryController {
 
         for (int i = 0; i < 5; i++) {
             JSONObject queryParam = new JSONObject();
-            queryParam.put("currentYear", currentYear);
+            queryParam.put("year", currentYear);
             queryParam.put("leader", "0");
             Map<String, Object> param = new JSONObject();
 

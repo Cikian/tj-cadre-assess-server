@@ -416,6 +416,8 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
 
             summary.setFillId(fillId);
             summary.setStatus(1);
+            // todo: 初始都为称职
+            summary.setLevel("2");
             summary.setCurrentYear(currentYear);
 
             if (bureauDepartIds.contains(summary.getDepart())) {

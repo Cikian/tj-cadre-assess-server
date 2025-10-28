@@ -122,6 +122,7 @@ public interface UserCommonApi {
     List<SysUser> getCurrentLeader();
     List<SysUser> getHistoryAssessUnit(String year);
     List<String> getHistoryUnitDeptIds(List<String> leaders, String year);
+    List<String> getAssessUnitDepart(String year, String leader);
 
     /**
      * 删除当前登录用户，慎用！！！

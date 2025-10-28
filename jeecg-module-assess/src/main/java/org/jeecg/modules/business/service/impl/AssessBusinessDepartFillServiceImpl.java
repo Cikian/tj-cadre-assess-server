@@ -408,12 +408,34 @@ public class AssessBusinessDepartFillServiceImpl extends ServiceImpl<AssessBusin
     @Override
     public Result<String> passAudit(String assessId, String name, List<AssessBusinessFillItem> itemList) {
 
+
+
         AssessBusinessDepartFill needAuditAssess = departFillMapper.selectById(assessId);
         if (needAuditAssess.getStatus() == 1) {
             return Result.error("当前考核未提交审核，请稍后重试！");
         }
         if (needAuditAssess.getStatus() == 3) {
             return Result.error("当前考核已通过审核，不可重复提交！");
+        }
+
+        LambdaQueryWrapper<AssessBusinessCommend> lqwC = new LambdaQueryWrapper<>();
+        lqwC.eq(AssessBusinessCommend::getDepartmentCode, needAuditAssess.getReportDepart());
+        lqwC.eq(AssessBusinessCommend::getCurrentYear, needAuditAssess.getCurrentYear());
+        List<AssessBusinessCommend> commends = commendMapper.selectList(lqwC);
+        if (commends.isEmpty()) {
+            if (!needAuditAssess.getNonCommend()) {
+                return Result.error("请填写本单位受表彰情况，如无表彰，请勾选新增表彰按钮左侧的“无表彰”");
+            }
+        }
+
+        LambdaQueryWrapper<AssessBusinessDenounce> lqwD = new LambdaQueryWrapper<>();
+        lqwD.eq(AssessBusinessDenounce::getDepartmentCode, needAuditAssess.getReportDepart());
+        lqwD.eq(AssessBusinessDenounce::getCurrentYear, needAuditAssess.getCurrentYear());
+        List<AssessBusinessDenounce> denounces = denounceMapper.selectList(lqwD);
+        if (denounces.isEmpty()) {
+            if (!needAuditAssess.getNonDenounce()) {
+                return Result.error("请填写本单位受通报情况，如无通报，请勾选新增通报按钮左侧的“无通报”");
+            }
         }
 
         // 过滤出分数不为空的数据

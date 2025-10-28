@@ -1010,6 +1010,15 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
     public List<LeaderProgressVO> getLeaderProgress() {
         List<LeaderProgressVO> result = new ArrayList<>();
 
+        AssessCurrentAssess assess = assessCommonApi.getCurrentAssessInfo("annual");
+        LambdaQueryWrapper<AssessDemocraticEvaluationSummary> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(AssessDemocraticEvaluationSummary::getCurrentYear, assess.getCurrentYear());
+
+        List<AssessDemocraticEvaluationSummary> summaryLists = this.list(lqw);
+        if (summaryLists == null || summaryLists.isEmpty()) {
+            throw new JeecgBootException("当前无正在进行中的民主测评。");
+        }
+
         List<AssessLeaderDepartConfig> configs = leaderDepartConfigMapper.selectList(null);
         for (AssessLeaderDepartConfig config : configs) {
             LeaderProgressVO vo = new LeaderProgressVO();
@@ -1153,19 +1162,10 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
         List<AssessDemocraticEvaluationSummary> list = democraticSummaryMapper.selectList(lqw);
 
         if (leader != null && !leader.isEmpty() && !"0".equals(leader)) {
-            LambdaQueryWrapper<AssessLeaderDepartConfig> lqw1 = new LambdaQueryWrapper<>();
-            lqw1.eq(AssessLeaderDepartConfig::getLeaderId, leader);
-            AssessLeaderDepartConfig config = leaderDepartConfigMapper.selectList(lqw1).get(0);
-
-            if (config != null) {
-                String departIds = config.getDepartId();
-                if (departIds != null && !departIds.isEmpty()) {
-                    List<String> departIdList = Arrays.asList(departIds.split(","));
-                    // 转换为set
-                    Set<String> departIdSet = new HashSet<>(departIdList);
-                    this.processSummaries(list, departIdSet);
-                }
-            }
+            List<String> departIdList = userCommonApi.getAssessUnitDepart(year, leader);
+            // 转换为set
+            Set<String> departIdSet = new HashSet<>(departIdList);
+            this.processSummaries(list, departIdSet);
 
             // 去除特殊人员
             this.processSpecialPerson(list, leader);

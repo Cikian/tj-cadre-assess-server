@@ -488,7 +488,7 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
             throw new JeecgBootException("当前年度考核未到推优节点，详情请联系管理员！");
         }
 
-        if ("1".equals(leaderRecs.getStatus())) {
+        if ("1".equals(leaderRecs.getStatus()) || "5".equals(leaderRecs.getStatus()) || "6".equals(leaderRecs.getStatus())) {
             throw new JeecgBootException("当前年度考核未到推优节点，详情请联系管理员！");
         }
 
@@ -2269,30 +2269,59 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
 
         summary.setFillId(newFill.getId());
 
-        String leader = oldFill.getLeader().replaceAll(hashId, "").replaceAll(",,", ",");
-        if (leader.endsWith(",")) leader = leader.substring(0, leader.length() - 1);
-        oldFill.setLeader(leader);
+        String leader = null;
+        if (oldFill.getLeader() != null) {
+            leader = oldFill.getLeader().replaceAll(hashId, "").replaceAll(",,", ",");
+        }
 
-        newFill.setLeader(newFill.getLeader() + "," + hashId);
+        if (leader != null) {
+            if (leader.endsWith(",")) {
+                leader = leader.substring(0, leader.length() - 1);
+            }
+            oldFill.setLeader(leader);
+        }
+        if (newFill.getLeader() != null) {
+            newFill.setLeader(newFill.getLeader() + "," + hashId);
+        }
 
         AssessAnnualArrange oldArrange = arrangeMapper.selectByMainId(oldFill.getId()).get(0);
         AssessAnnualArrange newArrange = arrangeMapper.selectByMainId(newFill.getId()).get(0);
 
-        if (summary.getType().equals("chief")) {
-            oldArrange.setChiefNum(oldArrange.getChiefNum() - 1);
-            oldArrange.setVoteA(oldArrange.getVoteA() - 1);
-            newArrange.setChiefNum(newArrange.getChiefNum() + 1);
-            newArrange.setVoteA(newArrange.getVoteA() + 1);
+        if ("chief".equals(summary.getType())) {
+            if (oldArrange.getChiefNum()!=null){
+                oldArrange.setChiefNum(Math.max(oldArrange.getChiefNum() - 1, 0));
+            }
+            if (oldArrange.getVoteA() != null) {
+                oldArrange.setVoteA(Math.max(oldArrange.getVoteA() - 1, 0));
+            }
+            if (newArrange.getChiefNum() != null) {
+                newArrange.setChiefNum(newArrange.getChiefNum() + 1);
+            } else {
+                newArrange.setChiefNum(1);
+            }
+            if (newArrange.getVoteA() != null) {
+                newArrange.setVoteA(newArrange.getVoteA() + 1);
+            }
         }
 
-        if (summary.getType().equals("deputy")) {
-            oldArrange.setDeputyNum(oldArrange.getDeputyNum() - 1);
-            oldArrange.setVoteB(oldArrange.getVoteB() - 1);
-            newArrange.setDeputyNum(newArrange.getDeputyNum() + 1);
-            newArrange.setVoteB(newArrange.getVoteB() + 1);
+        if ("deputy".equals(summary.getType())) {
+            if (oldArrange.getDeputyNum() != null) {
+                oldArrange.setDeputyNum(Math.max(oldArrange.getDeputyNum() - 1, 0));
+            }
+            if (oldArrange.getVoteB() != null) {
+                oldArrange.setVoteB(Math.max(oldArrange.getVoteB() - 1, 0));
+            }
+            if (newArrange.getDeputyNum() != null) {
+                newArrange.setDeputyNum(newArrange.getDeputyNum() + 1);
+            } else {
+                newArrange.setDeputyNum(1);
+            }
+            if (newArrange.getVoteB() != null) {
+                newArrange.setVoteB(newArrange.getVoteB() + 1);
+            }
         }
 
-        summaryMapper.updateById(summary);
+        this.updateById(summary);
         fillMapper.updateById(oldFill);
         fillMapper.updateById(newFill);
         arrangeMapper.updateById(oldArrange);

@@ -453,7 +453,7 @@ public class AssessBusinessDepartFillController {
 
         for (AssessBusinessFillItem entity : itemList) {
             if (entity.getScore() != null && entity.getScore().compareTo(new BigDecimal(100)) < 0) {
-                if (entity.getReasonOfDeduction() == null || "".equals(entity.getReasonOfDeduction().trim()) || entity.getReasonOfDeduction().isEmpty()) {
+                if (entity.getReasonOfDeduction() == null || entity.getReasonOfDeduction().trim().isEmpty() || entity.getReasonOfDeduction().isEmpty()) {
                     return Result.error("填报中存在分数小于100分，并且未填写扣分原因，请核对后重新提交！");
                 }
             }
