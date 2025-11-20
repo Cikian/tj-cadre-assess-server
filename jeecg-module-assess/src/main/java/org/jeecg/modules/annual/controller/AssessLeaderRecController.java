@@ -12,11 +12,13 @@ import org.jeecg.common.system.query.QueryGenerator;
 import org.jeecg.common.system.vo.LoginUser;
 import org.jeecg.modules.annual.service.IAssessLeaderRecItemService;
 import org.jeecg.modules.annual.service.IAssessLeaderRecService;
+import org.jeecg.modules.depart.DepartCommonApi;
 import org.jeecg.modules.sys.AssessCommonApi;
 import org.jeecg.modules.sys.entity.AssessCurrentAssess;
 import org.jeecg.modules.sys.entity.annual.AssessLeaderRec;
 import org.jeecg.modules.sys.entity.annual.AssessLeaderRecItem;
 import org.jeecg.modules.user.UserCommonApi;
+import org.jeecg.modules.utils.CommonUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,11 +44,13 @@ public class AssessLeaderRecController extends JeecgController<AssessLeaderRec, 
     private AssessCommonApi assessCommonApi;
     @Autowired
     private UserCommonApi userCommonApi;
+    @Autowired
+    private DepartCommonApi departCommonApi;
 
     @GetMapping(value = "/list")
     public Result<IPage<AssessLeaderRec>> queryPageList(AssessLeaderRec AssessLeaderRec,
                                                         @RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo,
-                                                        @RequestParam(name = "pageSize", defaultValue = "10") Integer pageSize,
+                                                        @RequestParam(name = "pageSize", defaultValue = "100") Integer pageSize,
                                                         HttpServletRequest req) {
         Map<String, String[]> parameterMap = new HashMap<>(req.getParameterMap());
 
@@ -67,8 +71,40 @@ public class AssessLeaderRecController extends JeecgController<AssessLeaderRec, 
             queryWrapper.ne("status", "1");
         }
 
-        Page<AssessLeaderRec> page = new Page<>(pageNo, pageSize);
+        Page<AssessLeaderRec> page = new Page<>(pageNo, 100);
         IPage<AssessLeaderRec> pageList = recService.page(page, queryWrapper);
+        List<AssessLeaderRec> records = pageList.getRecords();
+
+        for (AssessLeaderRec rec : records) {
+            List<String> arr = new ArrayList<>();
+            for (String s : rec.getBureauRec().split(",")) {
+                s = CommonUtils.getNameByHashId(s);
+                arr.add(s);
+            }
+            rec.setBureauRec(String.join("、", arr));
+            arr.clear();
+            for (String s : rec.getBasicRec().split(",")) {
+                s = CommonUtils.getNameByHashId(s);
+                arr.add(s);
+            }
+            rec.setBasicRec(String.join("、", arr));
+            arr.clear();
+            for (String s : rec.getInstitutionRec().split(",")) {
+                s = CommonUtils.getNameByHashId(s);
+                arr.add(s);
+            }
+            rec.setInstitutionRec(String.join("、", arr));
+            arr.clear();
+            for (String s : rec.getGroupRec().split(",")) {
+                String departName = departCommonApi.getDepartNameById(s);
+                arr.add(departName);
+            }
+            rec.setGroupRec(String.join("、", arr));
+            arr.clear();
+        }
+
+        pageList.setRecords(records);
+
         return Result.OK(pageList);
     }
 

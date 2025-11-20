@@ -59,4 +59,6 @@ public interface IAssessRegularReportItemService extends IService<AssessRegularR
 
 	void deleteRetiree(String currentYear, List<AssessRegularReportItem> reportItems);
 
+    void dontAssess(String id);
+    void goon(String id);
 }

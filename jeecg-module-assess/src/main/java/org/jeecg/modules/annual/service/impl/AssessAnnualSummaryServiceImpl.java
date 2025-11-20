@@ -1711,7 +1711,7 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         StringBuilder sb = new StringBuilder();
 
         for (AssessAnnualSummary s : groupList) {
-            if (s.getRemark().contains("业务")) {
+            if (s.getRemark() != null && s.getRemark().contains("业务")) {
                 level1.add(s);
             }
         }
@@ -1792,19 +1792,20 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
 
         for (AssessAnnualSummary s : totalPeople) {
             String remark = s.getRemark();
-            if (remark.contains("平时")) {
-                level1.add(s);
+            if (remark != null) {
+                if (remark.contains("平时")) {
+                    level1.add(s);
+                }
+                if (remark.contains("问责")) {
+                    level2.add(s);
+                }
+                if (remark.contains("业务工作测评")) {
+                    level3.add(s);
+                }
+                if (remark.contains("休假超过半年")) {
+                    level4.add(s);
+                }
             }
-            if (remark.contains("问责")) {
-                level2.add(s);
-            }
-            if (remark.contains("业务工作测评")) {
-                level3.add(s);
-            }
-            if (remark.contains("休假超过半年")) {
-                level4.add(s);
-            }
-
         }
 
         for (AssessAnnualSummary s : level1) {
@@ -2288,7 +2289,7 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         AssessAnnualArrange newArrange = arrangeMapper.selectByMainId(newFill.getId()).get(0);
 
         if ("chief".equals(summary.getType())) {
-            if (oldArrange.getChiefNum()!=null){
+            if (oldArrange.getChiefNum() != null) {
                 oldArrange.setChiefNum(Math.max(oldArrange.getChiefNum() - 1, 0));
             }
             if (oldArrange.getVoteA() != null) {

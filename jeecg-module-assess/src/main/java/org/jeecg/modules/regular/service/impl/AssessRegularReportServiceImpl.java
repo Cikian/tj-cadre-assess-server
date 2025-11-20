@@ -299,7 +299,7 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
     @Override
     public ConflictInfoVO checkForConflicts(RegularStartVO regularStartVO) {
 
-        String yearToCheck = regularStartVO.getCurrentQuarter().equals("1")
+        String yearToCheck = "1".equals(regularStartVO.getCurrentQuarter())
                 ? String.valueOf(Integer.parseInt(regularStartVO.getCurrentYear()) - 1)
                 : regularStartVO.getCurrentYear();
 
@@ -410,6 +410,7 @@ public class AssessRegularReportServiceImpl extends ServiceImpl<AssessRegularRep
         assessRegularReport.setWarnStatus("1");
         assessRegularReport.setDeadline(regularStartVO.getDeadline());
         reportMapper.updateById(assessRegularReport);
+
         // 存储符合条件的 AssessRegularReportItem 对象
         List<AssessRegularReportItem> matchingItems = new ArrayList<>();
 

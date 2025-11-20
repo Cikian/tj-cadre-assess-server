@@ -200,11 +200,10 @@ public class AssessRegularResultServiceImpl extends ServiceImpl<AssessRegularRes
         LambdaQueryWrapper<AssessRegularReportItem> lqw = new LambdaQueryWrapper<>();
         lqw.eq(AssessRegularReportItem::getCurrentYear, year);
         lqw.eq(AssessRegularReportItem::getIsLeader, "1");
+        lqw.eq(AssessRegularReportItem::getDelFlag, 0);
         lqw.notIn(AssessRegularReportItem::getHashId, specials);
 
         List<AssessRegularReportItem> items = itemMapper.selectList(lqw);
-
-
 
         Map<String, Boolean> res = new HashMap<>();
 

@@ -23,7 +23,9 @@ import org.jeecg.modules.sys.entity.business.AssessLeaderDepartConfig;
 import org.jeecg.modules.sys.mapper.annual.AssessAnnualSummaryMapper;
 import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.utils.CommonUtils;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -52,6 +54,7 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
     @Autowired
     private AssessAnnualSummaryMapper annualSummaryMapper;
 
+    @Qualifier("assessRegularMergeDepartServiceImpl")
     @Autowired
     private IAssessRegularMergeDepartService assessRegularMergeDepartService;
     @Autowired
@@ -59,13 +62,13 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
 
     @Override
     public List<AssessRegularReportItem> selectByMainId(String mainId) {
-        List<AssessRegularReportItem> list= assessRegularReportItemMapper.selectByMainId(mainId);
-        AssessRegularReport assessRegularReport= assessRegularReportMapper.selectById(mainId);
-        String departId=assessRegularReport.getDepartmentCode();
-        LambdaQueryWrapper<AssessRegularMergeDepart> queryWrapper=new LambdaQueryWrapper<>();
-        queryWrapper.eq(AssessRegularMergeDepart::getDepart,departId).eq(AssessRegularMergeDepart::getReportDepart,"Y");
-        if (assessRegularMergeDepartService.count(queryWrapper)>0){
-            List<AssessRegularReportItem> OtherMergeDepartData =getOtherMergeDepartData(assessRegularReport);
+        List<AssessRegularReportItem> list = assessRegularReportItemMapper.selectByMainId(mainId);
+        AssessRegularReport assessRegularReport = assessRegularReportMapper.selectById(mainId);
+        String departId = assessRegularReport.getDepartmentCode();
+        LambdaQueryWrapper<AssessRegularMergeDepart> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(AssessRegularMergeDepart::getDepart, departId).eq(AssessRegularMergeDepart::getReportDepart, "Y");
+        if (assessRegularMergeDepartService.count(queryWrapper) > 0) {
+            List<AssessRegularReportItem> OtherMergeDepartData = getOtherMergeDepartData(assessRegularReport);
             list.addAll(OtherMergeDepartData);
         }
         return list;
@@ -73,7 +76,7 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
 
     @Override
     public void addAssessRegularReportItem(AssessRegularReportItem item) {
-        if(!isYearItem(item)){
+        if (!isYearItem(item)) {
             // 若ID为默认值或空值
             if (item.getId() == null || item.getId().isEmpty()) {
                 item.setId(IdWorker.getIdStr());
@@ -97,7 +100,7 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
             if (i.getId() == null || i.getId().isEmpty()) {
                 i.setId(IdWorker.getIdStr());
             }
-            String sex = i.getSex() == 1? "男" : "女";
+            String sex = i.getSex() == 1 ? "男" : "女";
             i.setHashId(CommonUtils.hashId(i.getName(), sex, i.getBirthDate()));
         });
 
@@ -120,6 +123,23 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
                 // 是否更换部门
                 isDepartmentUpdated(item);
             }
+            // 更新原记录
+            AssessRegularReportItem existingItem = this.getOne(new LambdaQueryWrapper<AssessRegularReportItem>()
+                    .eq(AssessRegularReportItem::getCurrentYear, item.getCurrentYear())
+                    .eq(AssessRegularReportItem::getHashId, item.getHashId())
+                    .eq(AssessRegularReportItem::getMainId, item.getMainId()));
+            if (existingItem != null) {
+                AssessRegularReportItem newItem = new AssessRegularReportItem();
+                BeanUtils.copyProperties(item, newItem);
+                newItem.setId(existingItem.getId());
+                newItem.setQuarter1(existingItem.getQuarter1());
+                newItem.setQuarter2(existingItem.getQuarter2());
+                newItem.setQuarter3(existingItem.getQuarter3());
+                newItem.setQuarter4(existingItem.getQuarter4());
+
+                assessRegularReportItemMapper.updateById(newItem);
+            }
+
         }
     }
 
@@ -145,9 +165,13 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
     /**
      * 检查部门是否更新
      */
+    // todo: 是否要将往年的成绩也带入到新的单位
     private void isDepartmentUpdated(AssessRegularReportItem item) {
         // 查询与 item 的 getHashId 相同的记录集合
-        List<AssessRegularReportItem> existingItems = assessRegularReportItemMapper.selectList(new LambdaQueryWrapper<AssessRegularReportItem>().eq(AssessRegularReportItem::getHashId, item.getHashId()));
+        // todo:若是同名同性别同年同月同日生的人，会有问题
+        List<AssessRegularReportItem> existingItems = assessRegularReportItemMapper.selectList(new LambdaQueryWrapper<AssessRegularReportItem>()
+                .eq(AssessRegularReportItem::getHashId, item.getHashId())
+                .eq(AssessRegularReportItem::getCurrentYear, item.getCurrentYear()));
 
         if (!existingItems.isEmpty()) {
             // 遍历集合，将 departmentCode 的值替换为 item 的 departmentCode
@@ -262,21 +286,21 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
         assessRegularReportItemMapper.update(null, luw);
     }
 
-    private List<AssessRegularReportItem> getOtherMergeDepartData(AssessRegularReport assessRegularReport){
-        LambdaQueryWrapper<AssessRegularMergeDepart> lambdaQueryWrapper=new LambdaQueryWrapper<>();
-        lambdaQueryWrapper.eq(AssessRegularMergeDepart::getReportDepart,"N");
-        List<AssessRegularMergeDepart> mergeDepartList=assessRegularMergeDepartService.list(lambdaQueryWrapper);
+    private List<AssessRegularReportItem> getOtherMergeDepartData(AssessRegularReport assessRegularReport) {
+        LambdaQueryWrapper<AssessRegularMergeDepart> lambdaQueryWrapper = new LambdaQueryWrapper<>();
+        lambdaQueryWrapper.eq(AssessRegularMergeDepart::getReportDepart, "N");
+        List<AssessRegularMergeDepart> mergeDepartList = assessRegularMergeDepartService.list(lambdaQueryWrapper);
 
-        List<AssessRegularReportItem> result=new LinkedList<>();
-        for (AssessRegularMergeDepart assessRegularMergeDepart:
-        mergeDepartList) {
-            String departCode=assessRegularMergeDepart.getDepart();
-            LambdaQueryWrapper<AssessRegularReport> queryWrapper=new LambdaQueryWrapper<>();
-            queryWrapper.eq(AssessRegularReport::getDepartmentCode,departCode).eq(AssessRegularReport::getCurrentYear,assessRegularReport.getCurrentYear()).eq(AssessRegularReport::getCurrentQuarter,assessRegularReport.getCurrentQuarter());
-            List<AssessRegularReport> regularReports=assessRegularReportMapper.selectList(queryWrapper);
-            if (regularReports.size()>0){
-                AssessRegularReport assessRegularReport1=regularReports.get(0);
-                List<AssessRegularReportItem> list= assessRegularReportItemMapper.selectByMainId(assessRegularReport1.getId());
+        List<AssessRegularReportItem> result = new LinkedList<>();
+        for (AssessRegularMergeDepart assessRegularMergeDepart :
+                mergeDepartList) {
+            String departCode = assessRegularMergeDepart.getDepart();
+            LambdaQueryWrapper<AssessRegularReport> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(AssessRegularReport::getDepartmentCode, departCode).eq(AssessRegularReport::getCurrentYear, assessRegularReport.getCurrentYear()).eq(AssessRegularReport::getCurrentQuarter, assessRegularReport.getCurrentQuarter());
+            List<AssessRegularReport> regularReports = assessRegularReportMapper.selectList(queryWrapper);
+            if (regularReports.size() > 0) {
+                AssessRegularReport assessRegularReport1 = regularReports.get(0);
+                List<AssessRegularReportItem> list = assessRegularReportItemMapper.selectByMainId(assessRegularReport1.getId());
                 result.addAll(list);
             }
         }
@@ -341,6 +365,22 @@ public class AssessRegularReportItemServiceImpl extends ServiceImpl<AssessRegula
         LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
         luw.in(AssessRegularReportItem::getId, idsToDelete);
         luw.set(AssessRegularReportItem::getDelFlag, 1);
+        assessRegularReportItemMapper.update(null, luw);
+    }
+
+    @Override
+    public void dontAssess(String id) {
+        LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
+        luw.eq(AssessRegularReportItem::getId, id);
+        luw.set(AssessRegularReportItem::getDelFlag, 1);
+        assessRegularReportItemMapper.update(null, luw);
+    }
+
+    @Override
+    public void goon(String id) {
+        LambdaUpdateWrapper<AssessRegularReportItem> luw = new LambdaUpdateWrapper<>();
+        luw.eq(AssessRegularReportItem::getId, id);
+        luw.set(AssessRegularReportItem::getDelFlag, 0);
         assessRegularReportItemMapper.update(null, luw);
     }
 
