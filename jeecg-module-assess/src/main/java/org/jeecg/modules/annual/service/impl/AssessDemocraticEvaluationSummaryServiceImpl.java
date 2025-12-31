@@ -263,6 +263,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
 
             // 获取summaryId对应的所有评分
             List<AssessDemocraticEvaluation> items = democraticEvaluationMapper.selectByMainId(id);
+            if (items.isEmpty()) continue;
             for (AssessDemocraticEvaluation item : items) {
                 // 分别计算A、B、C级的总分和数量
                 switch (item.getVoteType()) {
@@ -283,6 +284,7 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
                 }
             }
 
+            // todo: index 0 Size 0
             // 获取权重配置
             AssessAnnualDemocraticConfig config = typeMap.get(items.get(0).getType());
             // 计算加权平均分
@@ -1054,9 +1056,25 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
         // 获取当前年度所有考核安排
         LambdaQueryWrapper<AssessAnnualFill> lqw = new LambdaQueryWrapper<>();
         lqw.eq(AssessAnnualFill::getCurrentYear, year);
+        lqw.eq(AssessAnnualFill::getStatus, 3);
         List<AssessAnnualFill> fills = annualFillMapper.selectList(lqw);
         // 将fills中的Id提取出来，组成一个List
-        List<String> fillIds = fills.stream().map(AssessAnnualFill::getId).collect(Collectors.toList());
+        List<String> departIds = fills.stream().map(AssessAnnualFill::getDepart).collect(Collectors.toList());
+        List<AssessDemocraticEvaluationSummary> evaluationSummaries = democraticSummaryMapper.selectList(new LambdaQueryWrapper<AssessDemocraticEvaluationSummary>()
+                .eq(AssessDemocraticEvaluationSummary::getCurrentYear, year)
+                .in(AssessDemocraticEvaluationSummary::getDepart, departIds));
+        List<String> evaDepartIds = evaluationSummaries.stream().map(AssessDemocraticEvaluationSummary::getDepart).collect(Collectors.toList());
+        List<String> eIds = evaDepartIds.stream()
+                .map(element -> element.startsWith("JG") ? element.substring(2) : element)
+                .collect(Collectors.toList());
+
+        List<AssessAnnualFill> collect = fills.stream()
+                .filter(fill -> fill != null && fill.getDepart() != null) // 可选：过滤掉fill对象或其depart为null的项
+                .filter(fill -> eIds.contains(fill.getDepart()))
+                .collect(Collectors.toList());
+
+
+        List<String> fillIds = collect.stream().map(AssessAnnualFill::getId).collect(Collectors.toList());
 
         // 获取所有考核安排
         LambdaQueryWrapper<AssessAnnualArrange> lqw2 = new LambdaQueryWrapper<>();
@@ -1259,7 +1277,9 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
             no++;
         }
 
-        res.sort(Comparator.comparing(DemGradeDTO::getRanking));
+        res.sort(Comparator.comparing(DemGradeDTO::getRanking,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+
         return res;
     }
 

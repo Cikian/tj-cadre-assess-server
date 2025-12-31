@@ -9,6 +9,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.system.query.QueryGenerator;
 import org.jeecg.common.util.oConvertUtils;
@@ -83,6 +85,11 @@ public class AssessRegularMergeDepartController extends JeecgController<AssessRe
 	//@RequiresPermissions("org.jeecg.modules:assess_regular_merge_depart:add")
 	@PostMapping(value = "/add")
 	public Result<String> add(@RequestBody AssessRegularMergeDepart assessRegularMergeDepart) {
+		String depart = assessRegularMergeDepart.getDepart();
+		List<AssessRegularMergeDepart> list = assessRegularMergeDepartService.list(new LambdaQueryWrapper<AssessRegularMergeDepart>().eq(AssessRegularMergeDepart::getDepart, depart));
+		if(!list.isEmpty()){
+			return Result.error("该处室已存在，请勿重复添加！");
+		}
 		assessRegularMergeDepartService.save(assessRegularMergeDepart);
 		return Result.OK("添加成功！");
 	}

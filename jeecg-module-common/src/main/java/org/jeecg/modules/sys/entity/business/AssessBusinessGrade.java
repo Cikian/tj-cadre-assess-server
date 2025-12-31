@@ -1,9 +1,6 @@
 package org.jeecg.modules.sys.entity.business;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -102,12 +99,14 @@ public class AssessBusinessGrade implements Serializable {
      */
     @Excel(name = "加分", width = 15)
     @ApiModelProperty(value = "加分")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     private java.math.BigDecimal addPoints;
     /**
      * 加分
      */
     @Excel(name = "减分", width = 15)
     @ApiModelProperty(value = "减分")
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     private java.math.BigDecimal subtractPoints;
     /**
      * 加分原因

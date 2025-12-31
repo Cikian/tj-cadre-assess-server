@@ -904,6 +904,9 @@ public class AssessDemocraticEvaluationSummaryController {
             AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("annual");
             if (currentAssessInfo != null) {
                 year = currentAssessInfo.getCurrentYear();
+                if (!currentAssessInfo.isAssessing()) {
+                    return Result.ok(new Page<DepartProgressVO>().setRecords(new ArrayList<>()));
+                }
             }
         }
         List<DepartProgressVO> progress = democraticSummaryService.getDepartProgressByYear(year);

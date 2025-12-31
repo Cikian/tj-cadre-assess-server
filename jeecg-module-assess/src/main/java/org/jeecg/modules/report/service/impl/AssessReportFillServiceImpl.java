@@ -102,13 +102,13 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
             add("3");
             add("4");
         }});
-        LambdaQueryWrapper<AssessNotReportDepart> queryWrapper=new LambdaQueryWrapper<>();
-        List<AssessNotReportDepart> configList= assessNotReportDepartService.list(queryWrapper);
-        for (AssessNotReportDepart assessNotReportDepart:
-        configList) {
-            List<String> list= Arrays.asList(assessNotReportDepart.getNotReportDepart().split(","));
-            for (String departCode:
-            list) {
+        LambdaQueryWrapper<AssessNotReportDepart> queryWrapper = new LambdaQueryWrapper<>();
+        List<AssessNotReportDepart> configList = assessNotReportDepartService.list(queryWrapper);
+        for (AssessNotReportDepart assessNotReportDepart :
+                configList) {
+            List<String> list = Arrays.asList(assessNotReportDepart.getNotReportDepart().split(","));
+            for (String departCode :
+                    list) {
                 departs.removeIf(item -> item.getId().equals(departCode));
             }
         }
@@ -144,7 +144,7 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
         // 添加年份字典数据
         departCommonApi.saveAssessYear(map.getCurrentYear());
         assessCommonApi.updateAssessCurrentYear(new AssessCurrentAssess("report", map.getAssessName(), currentYear, new Date(), map.getDeadline(), null, true));
-
+        this.stopDem();
         // 提交事务、清理缓存、关闭sqlSession
         sqlSession.commit();
         sqlSession.clearCache();
@@ -242,14 +242,14 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
                     .collect(Collectors.toList());
 
             // 输出结果
-            return new ReportIndexLeader(uncompleted, (int)countStatus3, ratio, reports);
+            return new ReportIndexLeader(uncompleted, (int) countStatus3, ratio, reports);
         }
         return null;
     }
 
     @Override
     public ReportIndexEmployee[] getPartial(String departId, AssessCurrentAssess assessInfo) {
-        if (assessInfo==null|| StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()){
+        if (assessInfo == null || StringUtils.isBlank(assessInfo.getCurrentYear()) || !assessInfo.isAssessing()) {
             return new ReportIndexEmployee[]{new ReportIndexEmployee("当前无正在进行的考核")};
         }
 
@@ -259,7 +259,7 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
 
         List<AssessReportFill> reports = reportFillMapper.selectList(queryWrapper);
 
-        if(reports.isEmpty()){
+        if (reports.isEmpty()) {
             return null;
         }
 
@@ -301,6 +301,7 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
             reportFillMapper.update(null, luw);
 
             // todo: 未锁定
+            this.stopDem();
         }
     }
 
@@ -350,11 +351,7 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
 
     @Override
     public void stopDem() {
-        AssessCurrentAssess currentAssessInfo = assessCommonApi.getCurrentAssessInfo("report");
-        if (currentAssessInfo != null && currentAssessInfo.isAssessing()) {
-            // 删除剩余的匿名账号
-            userCommonApi.deleteAllAnonymousAccount("report");
-        }
+        userCommonApi.deleteAllAnonymousAccount("report");
     }
 
     private void checkFillSubmit(ReportFillDTO reportFillDTO) {

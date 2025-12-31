@@ -478,10 +478,10 @@ public class AssessReportEvaluationSummaryServiceImpl extends ServiceImpl<Assess
                 }
             }
 
-            BigDecimal rateA = BigDecimal.valueOf(numA).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
-            BigDecimal rateB = BigDecimal.valueOf(numB).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
-            BigDecimal rateC = BigDecimal.valueOf(numC).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
-            BigDecimal rateD = BigDecimal.valueOf(numD).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
+            BigDecimal rateA = total == 0 ? new BigDecimal(0) : BigDecimal.valueOf(numA).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
+            BigDecimal rateB = total == 0 ? new BigDecimal(0) : BigDecimal.valueOf(numB).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
+            BigDecimal rateC = total == 0 ? new BigDecimal(0) : BigDecimal.valueOf(numC).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
+            BigDecimal rateD = total == 0 ? new BigDecimal(0) : BigDecimal.valueOf(numD).divide(BigDecimal.valueOf(total), 6, RoundingMode.HALF_UP);
 
             // 乘以100，保留两位小数
             rateA = rateA.multiply(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
@@ -1198,9 +1198,11 @@ public class AssessReportEvaluationSummaryServiceImpl extends ServiceImpl<Assess
      */
     private double calRate(int count, int total) {
         double v = (double) count / total;
+        if (total == 0 || count == 0) {
+            v = 0;
+        }
         String formattedNumber = String.format("%.4f", v);
-        double dV = Double.valueOf(formattedNumber);
-        return dV;
+        return Double.parseDouble(formattedNumber);
     }
 
     /**

@@ -77,10 +77,9 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       driverClassName: dm.jdbc.driver.DmDriver
-      url: jdbc:dm://129.200.9.136:5236/?TJ-CADRE-ASSESS&rewriteBatchedStatements=true&zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=utf-8
-#      url: jdbc:dm://192.168.20.24:5236/?TJ-CADRE-ASSESS&rewriteBatchedStatements=true&zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=utf-8
+      url: jdbc:dm://dwc?dwc=129.200.9.136:5237,129.200.9.137:5237&TIME_ZONE=(+480)&LOGIN_MODE=1&rewriteBatchedStatements=true&zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=utf-8
       username: TJ-CADRE-ASSESS
-      password: stargis@022
+      password: Stargis@022
   #redis 配置
   redis:
     database: 0

@@ -622,7 +622,7 @@ public class AssessAnnualFillController {
      */
     @AutoLog(value = "删除调整项")
     @ApiOperation(value = "删除调整项", notes = "删除调整项")
-    @DeleteMapping(value = "/deleteAdjustment")
+    @PutMapping(value = "/deleteAdjustment")
     public Result<String> deleteAdjustment(@RequestBody List<String> idsToDelete) {
         // 检查 ID 列表是否为空
         if (idsToDelete == null || idsToDelete.isEmpty()) {

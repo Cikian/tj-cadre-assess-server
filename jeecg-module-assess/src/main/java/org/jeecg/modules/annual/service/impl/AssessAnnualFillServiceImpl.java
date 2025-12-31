@@ -563,7 +563,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
         // 添加年份字典数据
         departCommonApi.saveAssessYear(currentYear);
         assessCommonApi.updateAssessCurrentYear(new AssessCurrentAssess("annual", assessName, currentYear, new Date(), deadline, null, true));
-
+        userCommonApi.deleteAllAnonymousAccount("annual");
         // 提交事务、清理缓存、关闭sqlSession
         sqlSession.commit();
         sqlSession.clearCache();

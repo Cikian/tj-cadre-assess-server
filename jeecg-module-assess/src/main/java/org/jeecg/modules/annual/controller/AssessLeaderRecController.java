@@ -77,30 +77,41 @@ public class AssessLeaderRecController extends JeecgController<AssessLeaderRec, 
 
         for (AssessLeaderRec rec : records) {
             List<String> arr = new ArrayList<>();
-            for (String s : rec.getBureauRec().split(",")) {
-                s = CommonUtils.getNameByHashId(s);
-                arr.add(s);
+            if (rec.getBureauRec() != null && !rec.getBureauRec().isEmpty()) {
+                for (String s : rec.getBureauRec().split(",")) {
+                    s = CommonUtils.getNameByHashId(s);
+                    arr.add(s);
+                }
+                rec.setBureauRec(String.join("、", arr));
+                arr.clear();
             }
-            rec.setBureauRec(String.join("、", arr));
-            arr.clear();
-            for (String s : rec.getBasicRec().split(",")) {
-                s = CommonUtils.getNameByHashId(s);
-                arr.add(s);
+
+            if (rec.getBasicRec() != null && !rec.getBasicRec().isEmpty()) {
+                for (String s : rec.getBasicRec().split(",")) {
+                    s = CommonUtils.getNameByHashId(s);
+                    arr.add(s);
+                }
+                rec.setBasicRec(String.join("、", arr));
+                arr.clear();
             }
-            rec.setBasicRec(String.join("、", arr));
-            arr.clear();
-            for (String s : rec.getInstitutionRec().split(",")) {
-                s = CommonUtils.getNameByHashId(s);
-                arr.add(s);
+
+            if (rec.getInstitutionRec() != null && !rec.getInstitutionRec().isEmpty()) {
+                for (String s : rec.getInstitutionRec().split(",")) {
+                    s = CommonUtils.getNameByHashId(s);
+                    arr.add(s);
+                }
+                rec.setInstitutionRec(String.join("、", arr));
+                arr.clear();
             }
-            rec.setInstitutionRec(String.join("、", arr));
-            arr.clear();
-            for (String s : rec.getGroupRec().split(",")) {
-                String departName = departCommonApi.getDepartNameById(s);
-                arr.add(departName);
+
+            if (rec.getGroupRec() != null && !rec.getGroupRec().isEmpty()) {
+                for (String s : rec.getGroupRec().split(",")) {
+                    String departName = departCommonApi.getDepartNameById(s);
+                    arr.add(departName);
+                }
+                rec.setGroupRec(String.join("、", arr));
+                arr.clear();
             }
-            rec.setGroupRec(String.join("、", arr));
-            arr.clear();
         }
 
         pageList.setRecords(records);
