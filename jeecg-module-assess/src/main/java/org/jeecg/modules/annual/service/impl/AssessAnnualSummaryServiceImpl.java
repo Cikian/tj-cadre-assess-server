@@ -427,7 +427,7 @@ public class AssessAnnualSummaryServiceImpl extends ServiceImpl<AssessAnnualSumm
         luw.eq(AssessAnnualSummary::getCurrentYear, year);
         luw.set(AssessAnnualSummary::getDisciplineRecommend, "");
         luw.set(AssessAnnualSummary::getLeaderRecommend, 0);
-        luw.set(AssessAnnualSummary::getLevel, "2");
+//        luw.set(AssessAnnualSummary::getLevel, "2");
         summaryMapper.update(null, luw);
         luw.clear();
 

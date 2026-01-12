@@ -1,9 +1,6 @@
 package org.jeecg.modules.sys.entity.report;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -107,6 +104,7 @@ public class AssessReportFill implements Serializable {
     @ApiModelProperty(value = "截止日期")
     private java.util.Date deadline;
 
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
     private String remark;
 
     private String reportBy;

@@ -9,7 +9,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.shiro.SecurityUtils;
 import org.jeecg.common.exception.JeecgBootException;
+import org.jeecg.common.system.vo.LoginUser;
 import org.jeecg.common.system.vo.SysDepartModel;
 import org.jeecg.modules.depart.DepartCommonApi;
 import org.jeecg.modules.report.entity.ReportIndexEmployee;
@@ -160,13 +162,21 @@ public class AssessReportFillServiceImpl extends ServiceImpl<AssessReportFillMap
         }
 
         AssessReportFill reportFill = reportFillDTO.getReportFill();
+
+        if ("1".equals(reportFill.getStatus()) || "4".equals(reportFill.getStatus())) {
+            LoginUser sysUser = (LoginUser) SecurityUtils.getSubject().getPrincipal();
+            reportFill.setReportBy(sysUser.getRealname());
+        }
+
         AssessReportArrange reportArrange = reportFillDTO.getReportArrange();
         List<AssessReportNewLeader> reportNewLeader = reportFillDTO.getReportNewLeader();
         List<AssessReportObjectInfo> reportObjectInfo = reportFillDTO.getReportObjectInfo();
 
         if (check) {
-            if (pass) reportFill.setStatus("3");
-            else reportFill.setStatus("2");
+            if (pass) {
+                reportFill.setStatus("3");
+                reportFill.setRemark(null);
+            } else reportFill.setStatus("2");
         }
 
         for (AssessReportObjectInfo objectInfo : reportObjectInfo) {

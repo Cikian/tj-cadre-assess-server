@@ -342,13 +342,19 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
 
         // 插入各处室考核填报表
         for (AssessAnnualSummary summary : summaryList) {
+
+            String summaryDepartId = summary.getDepart();
+            if(!summaryDepartId.matches("^\\d.*")) {
+                throw new JeecgBootException("标准简称匹配失败，请检查Excel中以下处室的标准简称是否正确：" + summaryDepartId);
+            }
+
             String fillId = null;
             // 判断当前departId是否在insertMap中
-            if (insertMap.containsKey(summary.getDepart())) {
-                fillId = insertMap.get(summary.getDepart());
+            if (insertMap.containsKey(summaryDepartId)) {
+                fillId = insertMap.get(summaryDepartId);
             } else {
                 fillId = IdWorker.getIdStr();
-                insertMap.put(summary.getDepart(), fillId);
+                insertMap.put(summaryDepartId, fillId);
 
                 // 插入填报表
                 AssessAnnualFill fill = new AssessAnnualFill();
@@ -356,9 +362,9 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
                 fill.setAssessName(assessName);
                 fill.setCurrentYear(currentYear);
                 fill.setDeadline(deadline);
-                fill.setDepart(summary.getDepart());
+                fill.setDepart(summaryDepartId);
                 fill.setStatus(1);
-                Integer i = excellentNumMap.get(summary.getDepart());
+                Integer i = excellentNumMap.get(summaryDepartId);
                 if (i != null && i > 0) {
                     fill.setExcellentDeputyNum(i);
                 } else {
@@ -385,12 +391,14 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
                     AssessAnnualSummary groupSummary = new AssessAnnualSummary();
                     groupSummary.setCurrentYear(currentYear);
                     groupSummary.setFillId(fillId);
-                    groupSummary.setDepart(summary.getDepart());
-                    groupSummary.setPerson(summary.getDepart());
+                    groupSummary.setDepart(summaryDepartId);
+                    // todo: 为什么person也设置为depart
+                    groupSummary.setPerson(summaryDepartId);
                     groupSummary.setRecommendType("group");
                     groupSummary.setType("group");
                     groupSummary.setDepartType(fill.getDepartType());
                     groupSummary.setHashId("group");
+                    groupSummary.setLevel("2");
 
                     groupSummaryList.add(groupSummary);
                 }
@@ -420,18 +428,18 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
             summary.setLevel("2");
             summary.setCurrentYear(currentYear);
 
-            if (bureauDepartIds.contains(summary.getDepart())) {
+            if (bureauDepartIds.contains(summaryDepartId)) {
                 summary.setDepartType("bureau");
-            } else if (basicDepartIds.contains(summary.getDepart())) {
+            } else if (basicDepartIds.contains(summaryDepartId)) {
                 summary.setDepartType("basic");
-            } else if (institutionDepartIds.contains(summary.getDepart())) {
+            } else if (institutionDepartIds.contains(summaryDepartId)) {
                 summary.setDepartType("institution");
             }
 
             if ("公务员".equals(summary.getIdentityType()) || "参公".equals(summary.getIdentityType())) {
-                if (bureauDepartIds.contains(summary.getDepart())) {
+                if (bureauDepartIds.contains(summaryDepartId)) {
                     summary.setRecommendType("bureau");
-                } else if (basicDepartIds.contains(summary.getDepart())) {
+                } else if (basicDepartIds.contains(summaryDepartId)) {
                     summary.setRecommendType("basic");
                 }
             } else {
@@ -1116,6 +1124,7 @@ public class AssessAnnualFillServiceImpl extends ServiceImpl<AssessAnnualFillMap
         lqw.eq(AssessAnnualFill::getId, assessId);
         lqw.set(AssessAnnualFill::getStatus, 3);
         lqw.set(AssessAnnualFill::getAuditBy, name);
+        lqw.set(AssessAnnualFill::getRemark, null);
         annualFillMapper.update(null, lqw);
 
         LambdaQueryWrapper<AssessAnnualSummary> lqw2 = new LambdaQueryWrapper<>();

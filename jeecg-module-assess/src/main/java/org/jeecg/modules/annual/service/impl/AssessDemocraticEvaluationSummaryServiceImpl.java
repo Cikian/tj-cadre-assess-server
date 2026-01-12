@@ -1771,6 +1771,10 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
         List<AssessDemocraticEvaluationSummary> demList = getDemocraticSummaries(year, hashIds);
         List<AssessDemocraticEvaluationSummary> allDem = getAllDemocraticSummaries(year);
 
+        demList = demList.stream().filter(e -> e.getScore() != null).collect(Collectors.toList());
+        allDem = allDem.stream().filter(e -> e.getScore() != null).collect(Collectors.toList());
+
+
         // 3. 处理部门名称格式
         processDepartmentNames(demList);
         processDepartmentNames(allDem);
@@ -1935,11 +1939,17 @@ public class AssessDemocraticEvaluationSummaryServiceImpl extends ServiceImpl<As
                 dem.getDepart(), Collections.emptyList());
 
         if (!sameDepart.isEmpty()) {
-            sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
+            Comparator<AssessDemocraticEvaluationSummary> comparator =
+                    Comparator.comparing(
+                            AssessDemocraticEvaluationSummary::getScore,
+                            Comparator.nullsLast(Comparator.naturalOrder())
+                    );
+            sameDepart.sort(comparator.reversed());
+//            sameDepart.sort(Comparator.comparing(AssessDemocraticEvaluationSummary::getScore).reversed());
             int rank = sameDepart.indexOf(dem) + 1;
 
             // 满分处理
-            if (dem.getScore().compareTo(BigDecimal.valueOf(100)) == 0) {
+            if ((dem.getScore() != null) && (dem.getScore().compareTo(BigDecimal.valueOf(100)) == 0)) {
                 rank = 1;
             }
 

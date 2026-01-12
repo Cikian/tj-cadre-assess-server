@@ -48,7 +48,9 @@ public class AssessReportNewLeaderServiceImpl extends ServiceImpl<AssessReportNe
             vo.setName(newLeader.getName());
             vo.setBirthday(newLeader.getBirthday());
             vo.setOriginalPosition(newLeader.getOriginalPosition());
+            vo.setOriginalDate(newLeader.getOriginalDate());
             vo.setCurrentPosition(newLeader.getCurrentPosition());
+            vo.setCurDate(newLeader.getCurDate());
 
             voList.add(vo);
         }
