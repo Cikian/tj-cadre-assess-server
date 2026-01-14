@@ -98,6 +98,7 @@ public class SysAnnouncementController {
 		QueryWrapper<SysAnnouncement> queryWrapper = QueryGenerator.initQueryWrapper(sysAnnouncement, req.getParameterMap());
 		Page<SysAnnouncement> page = new Page<SysAnnouncement>(pageNo,pageSize);
 		queryWrapper.orderByDesc("create_time");
+		queryWrapper.eq("send_status", "1");
 
 		//update-begin-author:lvdandan date:20211229 for: sqlserver mssql-jdbc 8.2.2.jre8版本下系统公告列表查询报错 查询SQL中生成了两个create_time DESC；故注释此段代码
 		//排序逻辑 处理
